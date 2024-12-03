@@ -41,3 +41,23 @@ COPY rootfs /
 
 # Change permissions
 RUN chmod +x /usr/local/bin/* /etc/cont-init.d/*
+
+# Docker labels
+LABEL \
+    io.hass.name="Pluggie" \
+    io.hass.description="Make your device visible!" \
+    io.hass.arch="${BUILD_ARCH}" \
+    io.hass.type="addon" \
+    io.hass.version=${BUILD_VERSION} \
+    maintainer="egresh <https://github.com/tiborgres/pluggie>" \
+    org.opencontainers.image.title="Pluggie" \
+    org.opencontainers.image.description="Make your device visible!" \
+    org.opencontainers.image.vendor="Pluggie" \
+    org.opencontainers.image.authors="egresh <https://github.com/tiborgres/pluggie>" \
+    org.opencontainers.image.licenses="MIT" \
+    org.opencontainers.image.url="https://addons.community" \
+    org.opencontainers.image.source="https://github.com/tiborgres/pluggie" \
+    org.opencontainers.image.documentation="https://github.com/tiborgres/pluggie/README.md" \
+    org.opencontainers.image.created=${BUILD_DATE} \
+    org.opencontainers.image.revision=${BUILD_REF} \
+    org.opencontainers.image.version=${BUILD_VERSION}

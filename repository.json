@@ -1,0 +1,9 @@
+{
+  "name": "Pluggie Addons",
+  "url": "https://github.com/tiborgres/pluggie",
+  "maintainer": "tiborgres <egresh@pluggie.net>",
+  "images": {
+    "ha-pluggie": "ghcr.io/tiborgres/pluggie/ha-pluggie",
+    "docker-pluggie": "ghcr.io/tiborgres/pluggie/docker-pluggie"
+  }
+}

@@ -1,0 +1,98 @@
+#include <tunables/global>
+
+profile pluggie flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+
+  # Basic capabilities
+  capability net_admin,
+  capability net_bind_service,
+  capability net_raw,
+  capability setuid,
+  capability setgid,
+  capability chown,
+  capability fowner,
+  capability dac_override,
+  capability mknod,
+  capability sys_module,
+  capability sys_resource,
+  capability kill,
+
+  # S6 related
+  /run/s6** rwixk,
+  /run/service** rwixk,
+  /run/s6-linux-init** rwixk,
+  /etc/s6** rwixk,
+  /etc/** r,
+
+  # From 005-config.sh
+  /etc/pluggie.conf rwk,
+  /etc/pluggie.state rwk,
+  /ssl/pluggie/ rw,
+  /ssl/pluggie/** rwk,
+  /var/lib/wireguard/ rw,
+  /var/lib/wireguard/** rwk,
+
+  # From 010-letsencrypt.sh
+  /var/log/letsencrypt/ rw,
+  /var/log/letsencrypt/** rwk,
+
+  # Python runtime
+  /usr/local/lib/ rix,
+  /usr/local/lib/** rix,
+  /usr/lib/python*/** mrwix,
+  /usr/local/bin/python* rix,
+  /usr/local/bin/get_config.py rix,
+
+  # NGINX from run script
+  /etc/nginx/** rwk,
+  /etc/nginx/http.d/** rwk,
+  /var/log/nginx/** rwk,
+  /var/lib/nginx/** rwk,
+  /run/nginx/nginx.pid rwk,
+  /usr/sbin/nginx ix,
+
+  # Service directories
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+
+  # Base directories and binaries
+  /init rix,
+  /package/admin/** rix,
+  /command/** ix,
+  /bin/** rix,
+  /usr/bin/** rix,
+  /usr/local/bin/ rix,
+  /usr/local/bin/** rix,
+  /usr/lib/bashio/ rix,
+  /usr/lib/bashio/** rix,
+  /sbin/** rix,
+  /usr/sbin/** rix,
+
+  # Required files and devices
+  /dev/net/tun rw,
+  /dev/** rw,
+  /tmp/** rwk,
+  /proc/*/task/*/comm w,
+  /proc/sys/net/ipv4/ip_forward rw,
+  /etc/os-release r,
+  /ssl/pluggie/domains.gen rwk,
+  /run/resolvconf/ rw,
+  /run/resolvconf/** rwix,
+  /etc/resolv.conf rw,
+  /etc/resolv.conf.bak rw,
+
+  # Wireguard executables
+  /usr/bin/wg rix,
+  /usr/bin/wg-quick rix,
+  /usr/bin/ip ix,
+  /etc/wireguard/** rwk,
+
+  # Network capabilities
+  network,
+
+  # Signal handling
+  signal (send, receive) set=(kill, term, int, hup, cont) peer=pluggie,
+  signal (send, receive) set=(kill, term, int, hup, cont) peer=unconfined,
+}

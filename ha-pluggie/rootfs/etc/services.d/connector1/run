@@ -1,0 +1,40 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Add-on: Pluggie
+# Runs Pluggie Connector
+# ==============================================================================
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+s6-svc -O /var/run/s6/legacy-services/connector1
+
+# Read environment variables from /etc/pluggie.conf
+source /etc/pluggie.conf
+
+bashio::log.debug "Starting Pluggie Connector.."
+
+# Wait for network stack to be ready
+timeout=5
+counter=0
+while ! ip link show lo >/dev/null 2>&1; do
+    sleep 1
+    counter=$((counter + 1))
+    if [ $counter -ge $timeout ]; then
+        bashio::log.error "Network stack not ready after ${timeout} seconds"
+        exit 1
+    fi
+done
+
+bashio::log.debug "Network stack is ready, starting Pluggie Connector.."
+
+export WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1
+
+# Start Wireguard
+if [[ "${__BASHIO_LOG_LEVEL}" -ge "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
+    # If debug level, show all output
+    wg-quick up "${PLUGGIE_INTERFACE1}"
+else
+    # Otherwise suppress WireGuard output
+    wg-quick up "${PLUGGIE_INTERFACE1}" > /dev/null 2>&1
+fi

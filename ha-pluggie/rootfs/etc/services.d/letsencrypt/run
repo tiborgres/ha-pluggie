@@ -1,0 +1,297 @@
+#!/usr/bin/with-contenv bashio
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+s6-svc -O /var/run/s6/legacy-services/letsencrypt
+
+# Read environment variables from /etc/pluggie.conf
+source /etc/pluggie.conf
+
+if [[ ! -v PLUGGIE_INTERFACE1 ]]; then
+    bashio::log.error "Error in reading configuration file /etc/pluggie.conf! Exiting. Please contact Pluggie Support"
+    kill -TERM 1
+fi
+
+# Check if basic auth is properly configured
+if bashio::config.has_value "basic_auth_username" || bashio::config.has_value "basic_auth_password"; then
+    # Check if both values are provided
+    if ! bashio::config.has_value "basic_auth_username" || ! bashio::config.has_value "basic_auth_password"; then
+        bashio::log.warning "Both basic_auth_username and basic_auth_password must be configured for Basic Auth. Disabling Basic Auth for now."
+        kill -TERM 1
+    fi
+fi
+
+# Check created wireguard network interface
+PLUGGIE_INTERFACE1_PATH="/sys/class/net/${PLUGGIE_INTERFACE1}"
+
+# Try for 5 seconds
+if ! timeout 5 bash -c "until [ -d ${PLUGGIE_INTERFACE1_PATH} ]; do sleep 1; done"; then
+    bashio::log.fatal "Network interface ${PLUGGIE_INTERFACE1} does not exist! Exiting. Please contact Pluggie Support"
+    kill -TERM 1
+else
+    bashio::log.debug "Network interface ${PLUGGIE_INTERFACE1} created."
+fi
+
+NGINXCONF=/etc/nginx/http.d/default.conf
+PLUGGIECONF=/etc/nginx/http.d/pluggie.conf
+PLUGGIEDIR=/ssl/pluggie
+
+CERT_DIR=${PLUGGIEDIR}/letsencrypt
+WORK_DIR=${PLUGGIEDIR}/workdir
+PROVIDER_ARGUMENTS=()
+ACME_CUSTOM_SERVER_ARGUMENTS=()
+KEY_ARGUMENTS=()
+
+ACME_SERVER=$(bashio::config 'acme_server')
+ACME_ROOT_CA=$(bashio::config 'acme_root_ca_cert')
+
+declare -A ENDPOINT_ARR
+declare -a HNAMES_ARR
+
+# Check DNS records validity first
+bashio::log.debug "Checking Pluggie Endpoint DNS records."
+# fill ENDPOINT_ARR with all ENDPOINT IP addresses
+# IPv4
+IPCOUNT=0
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} A @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="A"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+# IPv6
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} AAAA @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="AAAA"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+
+# CNAME
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} CNAME @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="CNAME"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+
+# ALIAS
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} ALIAS @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="ALIAS"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+
+
+HNAMES=${PLUGGIE_HOSTNAME}
+
+# fill HNAMES_ARR with all HA hostnames defined in HNAMES
+readarray -t HNAMES_ARR < <(echo ${HNAMES})
+
+# iter over HNAMES_ARR
+for HNAME in ${HNAMES_ARR[@]}
+do
+  # iter over ENDPOINT_ARR
+  for ((i=1;i<=${IPCOUNT};i++))
+  do
+    # fill HNAMEIP_ARR with all resolved IP addresses of HA hostnames
+    readarray -t HNAMEIP_ARR < <(dig +short ${HNAME} ${ENDPOINT_ARR[$i,1]} @${PLUGGIE_DNS}|grep -v "\.$")
+
+    # check if endpoint IP address is in HA hostnames array and add return code (0/1)
+    # to endpoint array to signal which DNS record is OK or NOT OK
+    if printf '%s\0' "${HNAMEIP_ARR[@]}" | grep -qw "${ENDPOINT_ARR[$i,2]}"
+    then
+      ENDPOINT_ARR[$i,3]="0"
+    else
+      ENDPOINT_ARR[$i,3]="1"
+    fi
+  done
+
+  # check missing DNS records
+  ERR=0
+  for ((i=1;i<=${IPCOUNT};i++))
+  do
+    if [ "${ENDPOINT_ARR[$i,3]}" == "1" ];
+    then
+      bashio::log.error "${HNAME} DNS record type ${ENDPOINT_ARR[$i,1]} is not valid. Missing ${ENDPOINT_ARR[$i,2]}"
+      ERR=1
+    fi
+  done
+done
+
+# final results
+if [ "${ERR}" == "1" ];
+then
+  bashio::log.error "NOT all DNS records for ${HNAMES} are valid. Please check DNS configuration."
+  bashio::log.error "Hostname(s) ${HNAMES} must point to Pluggie servers."
+  bashio::log.error "Easiest way is to create 'ALIAS' or 'CNAME' DNS record pointing to '${PLUGGIE_ENDPOINT1_SHORT}'"
+else
+  bashio::log.debug "All DNS records for ${HNAMES} valid."
+fi
+
+
+# Gather all domains into a plaintext file
+DOMAIN_ARR=()
+for line in ${PLUGGIE_HOSTNAME}; do
+    DOMAIN_ARR+=(-d "$line")
+done
+echo "$PLUGGIE_HOSTNAME" > ${PLUGGIEDIR}/domains.gen
+
+
+# back to certbot stuff
+if bashio::config.has_value 'acme_server' ; then
+    ACME_CUSTOM_SERVER_ARGUMENTS+=("--server" "${ACME_SERVER}")
+
+    if bashio::config.has_value 'acme_root_ca_cert'; then
+      echo "${ACME_ROOT_CA}" > /tmp/root-ca-cert.crt
+      # Certbot will automatically open the filepath contained in REQUESTS_CA_BUNDLE for extra CA cert
+      export REQUESTS_CA_BUNDLE=/tmp/root-ca-cert.crt
+    fi
+fi
+
+# Key detection or manual ECDSA/RSA selection
+if bashio::config.exists 'key_type'; then
+    # Use key type set in configuration
+    KEY_TYPE=$(bashio::config 'key_type')
+    KEY_ARGUMENTS+=("--key-type" "${KEY_TYPE}")
+    if [ "${KEY_TYPE}" == "ecdsa" ]; then
+        if bashio::config.exists 'elliptic_curve'; then
+            ELLIPTIC_CURVE=$(bashio::config 'elliptic_curve')
+            KEY_ARGUMENTS+=("--elliptic-curve" "${ELLIPTIC_CURVE}")
+        else
+            KEY_ARGUMENTS+=("--elliptic-curve" "secp384r1")
+        fi
+    fi
+else
+    bashio::log.debug "Detecting existing certificate type for ${DOMAIN_ARR[1]}"
+    readarray -t CBCERTS < <(certbot certificates --non-interactive --cert-name "${DOMAIN_ARR[1]}" --config-dir "$CERT_DIR" --work-dir "$WORK_DIR")
+    for output in "${CBCERTS[@]}"; do
+        if [[ $output =~ "No certificates found." ]]; then
+            bashio::log.debug "No certificate found - using 'ecdsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "ecdsa")
+            break
+        fi
+        if [[ $output =~ "Key Type: RSA" ]]; then
+            bashio::log.debug "Existing certificate using 'rsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "rsa")
+            break
+        fi
+        if [[ $output =~ "Key Type: ECDSA" ]]; then
+            bashio::log.debug "Existing certificate using 'ecdsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "ecdsa")
+            break
+        fi
+    done
+fi
+
+# Generate a new certificate if necessary or expand a previous certificate if domains has changed
+if [[ "${__BASHIO_LOG_LEVEL}" -eq "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
+    QUIET_OPT=""
+else
+    QUIET_OPT="--quiet"
+fi
+certbot certonly ${QUIET_OPT} --non-interactive --keep-until-expiring --expand \
+    --email "${PLUGGIE_EMAIL}" --agree-tos \
+    "${KEY_ARGUMENTS[@]}" \
+    --cert-name "${DOMAIN_ARR[1]}" "${DOMAIN_ARR[@]}" \
+    --config-dir "$CERT_DIR" --work-dir "$WORK_DIR" \
+    --preferred-challenges "http" "${ACME_CUSTOM_SERVER_ARGUMENTS[@]}" --standalone \
+    --preferred-chain "ISRG Root X1"
+
+# Get cert directory
+# shellcheck disable=SC2012
+CERT_DIR_LATEST="$(ls -td $CERT_DIR/live/*/ |grep "${DOMAIN_ARR[1]}" | head -1)"
+
+
+# Write NGINX configuration
+bashio::log.debug "Writing NGINX configuration."
+
+cat <<EOF > ${NGINXCONF}
+server {
+    listen ${PLUGGIE_HTTP_PORT} default_server;
+    listen [::]:${PLUGGIE_HTTP_PORT} default_server;
+
+    # Everything is a 404
+    location / {
+        return 404;
+    }
+
+    # You may need this to prevent return 404 recursion.
+    location = /404.html {
+        internal;
+    }
+}
+EOF
+
+# Configure basic auth only if both username and password are set (checked at the start)
+if bashio::config.has_value "basic_auth_username" && bashio::config.has_value "basic_auth_password"; then
+    bashio::log.debug "Enabling Basic Auth"
+    bashio::log.info "Configuring Basic Auth protection"
+
+    # Create auth file directory if it doesn't exist
+    mkdir -p /etc/nginx/auth
+
+    # Create htpasswd file
+    htpasswd -cb /etc/nginx/auth/.htpasswd \
+        "$(bashio::config 'basic_auth_username')" \
+        "$(bashio::config 'basic_auth_password')" > /dev/null 2>&1
+
+    # Ensure nginx user has access to the auth file
+    chown -R nginx:nginx /etc/nginx/auth
+    chmod 600 /etc/nginx/auth/.htpasswd
+fi
+
+cat <<EOF > ${PLUGGIECONF}
+server {
+    listen                        ${PLUGGIE_HTTPS_PORT} ssl;
+    server_name                   ${DOMAIN_ARR[1]};
+    ssl_certificate               ${CERT_DIR_LATEST}fullchain.pem;
+    ssl_certificate_key           ${CERT_DIR_LATEST}privkey.pem;
+
+    # Basic location block
+    location / {
+EOF
+
+# Add basic auth configuration if enabled
+if bashio::config.has_value "basic_auth_username" && bashio::config.has_value "basic_auth_password"; then
+    cat <<EOF >> ${PLUGGIECONF}
+        # Basic authentication
+        auth_basic "Restricted Access";
+        auth_basic_user_file /etc/nginx/auth/.htpasswd;
+
+EOF
+fi
+
+PROXIED_HOST=$(bashio::config 'proxied_host' 'http://homeassistant.local.hass.io:8123')
+PROXIED_PROTOCOL=$(echo "${PROXIED_HOST}" | sed -E 's#^(https?)://.*$#\1#')
+PROXIED_HOSTNAME=$(echo "${PROXIED_HOST}" | sed -E 's#^https?://([^:/]+).*$#\1#')
+
+# Continue with the rest of the configuration
+cat <<EOF >> ${PLUGGIECONF}
+        proxy_pass                ${PROXIED_HOST};
+        proxy_redirect            ${PROXIED_PROTOCOL}://${PROXIED_HOSTNAME}/ \$scheme://\$server_name/;
+        proxy_http_version        1.1;
+        proxy_set_header          Host ${PROXIED_HOSTNAME};
+        proxy_set_header          X-Real-IP \$remote_addr;
+        proxy_set_header          X-Forwarded-Host ${PROXIED_HOSTNAME};
+        proxy_set_header          X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header          X-Forwarded-Proto \$scheme;
+        proxy_set_header          Upgrade \$http_upgrade;
+        proxy_set_header          Connection "upgrade";
+        proxy_set_header          Accept-Encoding "";
+        proxy_buffering           off;
+        proxy_request_buffering   off;
+
+        # SSL
+        proxy_ssl_server_name     on;
+    }
+}
+EOF
+
+bashio::log.debug "NGINX configuration written."
+bashio::log.debug "Starting NGINX."
+nginx -c /etc/nginx/nginx.conf
+bashio::log.debug "NGINX started."
+bashio::log.info "Pluggie started."

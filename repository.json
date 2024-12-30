@@ -1,0 +1,8 @@
+{
+  "name": "Pluggie Addons",
+  "url": "https://github.com/tiborgres/ha-pluggie",
+  "maintainer": "tiborgres <egresh@pluggie.net>",
+  "images": {
+    "ha-pluggie": "ghcr.io/tiborgres/ha-pluggie"
+  }
+}

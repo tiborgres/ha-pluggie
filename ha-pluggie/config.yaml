@@ -1,0 +1,54 @@
+name: Pluggie
+version: 0.2.5.3
+slug: pluggie
+description: Make your device visible! (Pluggie)
+url: https://pluggie.net
+codenotary: egresh@pluggie.net
+image: ghcr.io/tiborgres/ha-pluggie
+arch:
+- aarch64
+- amd64
+- armhf
+- armv7
+- i386
+apparmor: true
+host_network: false
+host_ipc: false
+host_dbus: false
+host_pid: false
+host_uts: false
+init: false
+hassio_api: false
+homeassistant_api: false
+auth_api: false
+full_access: false
+ingress: false
+audio: false
+video: false
+gpio: false
+usb: false
+uart: false
+devicetree: false
+tmpfs: false
+stdin: false
+legacy: false
+privileged:
+- NET_ADMIN
+devices:
+- /dev/net/tun
+map:
+- ssl:rw
+options:
+  configuration:
+    access_key: XXXXX
+schema:
+  configuration:
+    access_key: str
+  log_level: list(debug|info|warning|error)?
+  proxied_host: str?
+  basic_auth_username: str?
+  basic_auth_password: password?
+  acme_root_ca_cert: str?
+  acme_server: str?
+  key_type: list(ecdsa|rsa)?
+  elliptic_curve: list(secp256r1|secp384r1)?

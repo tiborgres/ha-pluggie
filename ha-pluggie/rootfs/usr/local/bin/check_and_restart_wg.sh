@@ -1,21 +1,12 @@
 #!/usr/bin/with-contenv bashio
 
-log_level=$(bashio::config 'log_level' 'info')
-bashio::log.level "${log_level}"
-
-# Read environment variables from /etc/pluggie.conf
-source /etc/pluggie.conf
-
-if [[ ! -v PLUGGIE_ENDPOINT1_SHORT ]]; then
-    bashio::log.error "Error in reading configuration file /etc/pluggie.conf! Exiting. Please contact Pluggie Support"
-    kill -TERM 1
-fi
-
+# Function to check DNS records
 check_dns() {
-    local dns_server=$1
-    bashio::log.debug "Checking ${dns_server}.."
-    local ip=$(dig +short ${PLUGGIE_ENDPOINT1_SHORT} A @${dns_server} | grep -v "\.$")
-    bashio::log.debug "Pluggie API IP from ${dns_server}: ${ip}"
+    local hostname=$1
+    local dns_server=$2
+    bashio::log.debug "Checking ${hostname} using DNS ${dns_server}.."
+    local ip=$(dig +short ${hostname} A @${dns_server} | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || echo "")
+    bashio::log.debug "IP for ${hostname} from ${dns_server}: ${ip}"
     echo "$ip"
 }
 
@@ -38,41 +29,105 @@ restart_wireguard() {
     fi
 }
 
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+# Read environment variables from /etc/pluggie.conf
+source /etc/pluggie.conf
+
+if [[ ! -v PLUGGIE_ENDPOINT1_SHORT ]]; then
+    bashio::log.fatal "Error in reading configuration file /etc/pluggie.conf! Exiting. Please contact Pluggie Support"
+    kill -TERM 1
+fi
+
+vpn_restart_needed=false
+
 # List of DNS servers to try (Cloudflare, Google, Quad9)
 dns_servers=("1.1.1.1" "8.8.8.8" "9.9.9.9")
 
 # Try DNS servers in order
 for server in "${dns_servers[@]}"; do
-    CURRENT_PLUGGIE_IP=$(check_dns "$server")
-    if [ -n "${CURRENT_PLUGGIE_IP}" ]; then
-        bashio::log.debug "Valid IP found: ${CURRENT_PLUGGIE_IP}"
-        break
+    # Check hostname IP
+    HOSTNAME_IP=$(check_dns "${PLUGGIE_HOSTNAME}" "$server")
+    if [ -n "${HOSTNAME_IP}" ]; then
+        bashio::log.debug "Valid hostname IP found: ${HOSTNAME_IP}"
+
+        # Check endpoint IP
+        CURRENT_ENDPOINT_IP=$(check_dns "${PLUGGIE_ENDPOINT1_SHORT}" "$server")
+        if [ -n "${CURRENT_ENDPOINT_IP}" ]; then
+            bashio::log.debug "Valid Pluggie endpoint IP found: ${CURRENT_ENDPOINT_IP}"
+
+            # Check API server using the same check_dns function
+            CURRENT_API_IP=$(check_dns "${PLUGGIE_APISERVER}" "$server")
+            if [ -n "${CURRENT_API_IP}" ]; then
+                bashio::log.debug "Valid API server IP found: ${CURRENT_API_IP}"
+                break
+            fi
+        fi
     fi
 done
 
 # If all DNS checks failed
-if [ -z "${CURRENT_PLUGGIE_IP}" ]; then
-    bashio::log.error "Error resolving Pluggie endpoint ${PLUGGIE_ENDPOINT1_SHORT}. No valid IP found. Keeping WireGuard up with old Endpoint DNS records."
-    exit 1
+if [ -z "${HOSTNAME_IP}" ]; then
+    bashio::log.error "Error resolving hostname ${PLUGGIE_HOSTNAME}. No valid IPs found."
+    # 'sleep 60' instead of 'exit 1' to keep running for case the DNS records will become valid again
+    bashio::log.info "Sleeping for 60 seconds to run loop again"
+    sleep 60
+    # exit 1
 fi
 
-bashio::log.debug "CURRENT_PLUGGIE_IP: ${CURRENT_PLUGGIE_IP}"
+if [ -z "${CURRENT_ENDPOINT_IP}" ]; then
+    bashio::log.error "Error resolving Pluggie endpoints. No valid IPs found. Keeping WireGuard up with old DNS records."
+    # 'sleep 60' instead of 'exit 1' to keep running for case the DNS records will become valid again
+    bashio::log.info "Sleeping for 60 seconds to run loop again"
+    sleep 60
+    # exit 1
+fi
+
+if [ -z "${CURRENT_API_IP}" ]; then
+    bashio::log.error "Error resolving Pluggie API server. No valid IPs found. Keeping WireGuard up with old DNS records."
+    # 'sleep 60' instead of 'exit 1' to keep running for case the DNS records will become valid again
+    bashio::log.info "Sleeping for 60 seconds to run loop again"
+    sleep 60
+    # exit 1
+fi
+
+bashio::log.debug "HOSTNAME_IP: ${HOSTNAME_IP}"
+bashio::log.debug "CURRENT_API_IP: ${CURRENT_API_IP}"
+bashio::log.debug "CURRENT_ENDPOINT_IP: ${CURRENT_ENDPOINT_IP}"
 bashio::log.debug "PLUGGIE_ENDPOINT1_IP: ${PLUGGIE_ENDPOINT1_IP}"
 bashio::log.debug "PLUGGIE_INTERFACE1: ${PLUGGIE_INTERFACE1}"
 
-vpn_restart_needed=false
+# Check if hostname or endpoint IP changed
+if [ "${HOSTNAME_IP}" != "${CURRENT_ENDPOINT_IP}" ]; then
+    bashio::log.error "Hostname IP (${HOSTNAME_IP}) does not match endpoint IP (${CURRENT_ENDPOINT_IP})"
+    vpn_restart_needed=true
+fi
 
+# Check if endpoint IP changed
+if [ "${CURRENT_ENDPOINT_IP}" != "${PLUGGIE_ENDPOINT1_IP}" ]; then
+    bashio::log.warning "Pluggie endpoint IP address changed."
+    vpn_restart_needed=true
+
+    # Get config from API to check if API server changed
+    response=$(curl -s -H "Authorization: Bearer $(bashio::config 'configuration.access_key')" "https://${PLUGGIE_APISERVER}/api/settings")
+    NEW_APISERVER=$(echo "${response}" | jq -r '.client_tunnel_settings.apiserver')
+
+    # If API server changed, update it in config
+    if [ -n "${NEW_APISERVER}" ] && [ "${NEW_APISERVER}" != "${PLUGGIE_APISERVER}" ]; then
+        bashio::log.warning "API server changed from ${PLUGGIE_APISERVER} to ${NEW_APISERVER}"
+        sed -i "/^export PLUGGIE_APISERVER/c\export PLUGGIE_APISERVER=\"${NEW_APISERVER}\"" /etc/pluggie.conf
+    fi
+fi
+
+# Check VPN connectivity
 if ! ping -q -c 1 -W 3 "${PLUGGIE_ENDPOINT1_IP_INT}" >/dev/null 2>&1; then
-    bashio::log.warning "VPN peer (${PLUGGIE_ENDPOINT1_IP_INT}) is not responding."
+    bashio::log.warning "Pluggie endpoint (${PLUGGIE_ENDPOINT1_IP_INT}) is not responding."
     vpn_restart_needed=true
 fi
 
-if [ "${CURRENT_PLUGGIE_IP}" != "${PLUGGIE_ENDPOINT1_IP}" ]; then
-    bashio::log.warning "Pluggie API IP address changed."
-    vpn_restart_needed=true
-fi
-
-if [ "$vpn_restart_needed" = true ]; then
+if [ "${vpn_restart_needed}" = true ]; then
     bashio::log.warning "Refreshing Pluggie configuration from API server.."
     if /usr/local/bin/get_config.py $(bashio::config 'configuration.access_key'); then
         bashio::log.warning "Pluggie configuration refreshed."
@@ -80,8 +135,8 @@ if [ "$vpn_restart_needed" = true ]; then
         bashio::log.warning "Restarting WireGuard interface ${PLUGGIE_INTERFACE1}.."
         if restart_wireguard; then
             bashio::log.warning "Successfully restarted WireGuard interface ${PLUGGIE_INTERFACE1}."
-            if [ "${CURRENT_PLUGGIE_IP}" != "${PLUGGIE_ENDPOINT1_IP}" ]; then
-                sed -i "/^export PLUGGIE_ENDPOINT1_IP/c\export PLUGGIE_ENDPOINT1_IP=\"${CURRENT_PLUGGIE_IP}\"" /etc/pluggie.conf
+            if [ "${CURRENT_ENDPOINT_IP}" != "${PLUGGIE_ENDPOINT1_IP}" ]; then
+                sed -i "/^export PLUGGIE_ENDPOINT1_IP/c\export PLUGGIE_ENDPOINT1_IP=\"${CURRENT_ENDPOINT_IP}\"" /etc/pluggie.conf
                 bashio::log.warning "Updated PLUGGIE_ENDPOINT1_IP in /etc/pluggie.conf"
             fi
 

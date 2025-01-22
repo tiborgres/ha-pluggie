@@ -26,12 +26,14 @@ profile pluggie flags=(attach_disconnected,mediate_deleted) {
   /etc/** r,
 
   # From 005-config.sh
-  /etc/pluggie.conf rwk,
   /etc/pluggie.state rwk,
   /ssl/pluggie/ rw,
   /ssl/pluggie/** rwk,
   /var/lib/wireguard/ rw,
   /var/lib/wireguard/** rwk,
+
+  # From 005-config.sh and check_and_restart_wg.sh
+  /etc/pluggie.conf* rwk,
 
   # From 010-letsencrypt.sh
   /var/log/letsencrypt/ rw,

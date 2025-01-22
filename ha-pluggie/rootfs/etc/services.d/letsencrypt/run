@@ -9,7 +9,7 @@ s6-svc -O /var/run/s6/legacy-services/letsencrypt
 source /etc/pluggie.conf
 
 if [[ ! -v PLUGGIE_INTERFACE1 ]]; then
-    bashio::log.error "Error in reading configuration file /etc/pluggie.conf! Exiting. Please contact Pluggie Support"
+    bashio::log.fatal "Error in reading configuration file /etc/pluggie.conf! Exiting. Please contact Pluggie Support"
     kill -TERM 1
 fi
 
@@ -76,14 +76,6 @@ do
   ENDPOINT_ARR[$IPCOUNT,2]="$i"
 done
 
-# ALIAS
-for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} ALIAS @${PLUGGIE_DNS} |grep -v "\.$"`
-do
-  IPCOUNT=$((IPCOUNT+1))
-  ENDPOINT_ARR[$IPCOUNT,1]="ALIAS"
-  ENDPOINT_ARR[$IPCOUNT,2]="$i"
-done
-
 
 HNAMES=${PLUGGIE_HOSTNAME}
 
@@ -126,7 +118,11 @@ if [ "${ERR}" == "1" ];
 then
   bashio::log.error "NOT all DNS records for ${HNAMES} are valid. Please check DNS configuration."
   bashio::log.error "Hostname(s) ${HNAMES} must point to Pluggie servers."
-  bashio::log.error "Easiest way is to create 'ALIAS' or 'CNAME' DNS record pointing to '${PLUGGIE_ENDPOINT1_SHORT}'"
+  bashio::log.error "Please create 'CNAME' DNS record pointing to '${PLUGGIE_ENDPOINT1_SHORT}'"
+  # 'sleep 60' instead of 'kill -TERM 1' to keep running for case the DNS records will become valid again
+  bashio::log.info "Sleeping for 60 seconds to run loop again"
+  sleep 60
+  # kill -TERM 1
 else
   bashio::log.debug "All DNS records for ${HNAMES} valid."
 fi

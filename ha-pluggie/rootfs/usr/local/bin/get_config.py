@@ -10,27 +10,40 @@ import logging
 from wireguard_tools import WireguardKey
 
 def setup_logging():
-    """Setup logging to work with bashio"""
-    log_level_map = {
-        'trace': logging.DEBUG,
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'notice': logging.INFO,
-        'warning': logging.WARNING,
-        'error': logging.ERROR,
-        'fatal': logging.CRITICAL
-    }
+    """Setup logging to work with bashio format"""
+    import sys
+    from datetime import datetime
 
-    # Get log level from environment or force to ERROR if not set
-    bashio_log_level = os.environ.get('LOG_LEVEL', 'info').lower()
-    python_log_level = log_level_map.get(bashio_log_level, logging.INFO)  # default to INFO
+    class BashioLogger:
+        def _log(self, level, msg, *args):
+            if args:
+                msg = msg % args
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            # Format: [HH:MM:SS] LEVEL: message
+            print(f"[{timestamp}] {level.upper()}: {msg}", file=sys.stderr)
 
-    # Configure logging
-    logging.basicConfig(
-        format='[%(asctime)s] %(levelname)s: %(message)s',
-        datefmt='%H:%M:%S',
-        level=python_log_level
-    )
+        def debug(self, msg, *args):
+            self._log('debug', msg, *args)
+
+        def info(self, msg, *args):
+            self._log('info', msg, *args)
+
+        def warning(self, msg, *args):
+            self._log('warning', msg, *args)
+
+        def error(self, msg, *args):
+            self._log('error', msg, *args)
+
+        def fatal(self, msg, *args):
+            self._log('fatal', msg, *args)
+
+        def critical(self, msg, *args):
+            self._log('fatal', msg, *args)
+
+    # Replace the logging module's functions with bashio logger
+    bashio_logger = BashioLogger()
+    for name in ['debug', 'info', 'warning', 'error', 'fatal', 'critical']:
+        setattr(logging, name, getattr(bashio_logger, name))
 
 def load_config_from_file(file_path):
     config = {}
@@ -63,21 +76,22 @@ def main():
     api_server = config.get('PLUGGIE_APISERVER')
     user_agent = config.get('PLUGGIE_USERAGENT', 'Pluggie-Client-HA/Default')
 
+    logging.debug(f"api_server: {api_server}")
+
     if not api_server:
         logging.error(f"Error: PLUGGIE_APISERVER not set in {config_file}. Please Rebuild Pluggie Add-on.")
         sys.exit(1)
-
-    api_url = f"https://{api_server}/api/settings"
-    headers = {
-        "Authorization": f"Bearer {args.access_key}",
-        "User-Agent": user_agent
-    }
 
     p_key = WireguardKey.generate()
     private_key, public_key = str(p_key), str(p_key.public_key())
 
     try:
         timeout = 10
+        api_url = f"https://{api_server}/api/settings"
+        headers = {
+            "Authorization": f"Bearer {args.access_key}",
+            "User-Agent": user_agent
+        }
         data = {"access_key": args.access_key, "public_key": public_key}
         response = requests.post(api_url, headers=headers, json=data, timeout=timeout)
 
@@ -86,9 +100,18 @@ def main():
         elif response.status_code == 400:
             logging.error(f"Invalid data, Error: {response.status_code}")
         elif response.status_code == 401:
-            logging.fatal(f"Wrong Access Key. Please set correct one in Pluggie Add-on Configuration. Error: {response.status_code}")
+            logging.fatal(f"Invalid Access Key. Please check your access key in Pluggie Add-on Configuration.")
+            with open("/etc/pluggie.state", "w") as f:
+                f.write("invalid_key")
+            sys.exit(1)
+        elif response.status_code == 403:
+            logging.fatal(f"Access denied: Your tunnel is currently disabled. Please contact support or check your subscription status.")
+            with open("/etc/pluggie.state", "w") as f:
+                f.write("disabled")
+            return
         else:
             logging.error(f"Error uploading Public Key to API server, Error: {response.status_code}")
+            sys.exit(1)
 
         response = requests.get(api_url, headers=headers, timeout=timeout)
         response.raise_for_status()
@@ -96,15 +119,29 @@ def main():
 
         if data["status"] == "success":
             config = data["client_tunnel_settings"]
-
-            # Check if tunnel is active
-            if not config.get("active"):
-                with open("/etc/pluggie.state", "w") as f:
-                    f.write("disabled")
-                return
-
             with open("/etc/pluggie.state", "w") as f:
                 f.write("enabled")
+
+            # Update configuration if API changed
+            if config["apiserver"] != api_server:
+                logging.debug(f"API server changed from {api_server} to {config['apiserver']}")
+                with open(config_file, "w") as f:
+                    f.write(f'export PLUGGIE_USERAGENT="{user_agent}"\n')
+                    f.write(f'export PLUGGIE_APISERVER="{config["apiserver"]}"\n')
+                    f.write(f'export PLUGGIE_DNS="{config.get("dns", "1.1.1.1")}"\n')
+
+                # Get configuration from new API server
+                config = load_config_from_file(config_file)
+                api_server = config.get('PLUGGIE_APISERVER')
+                api_url = f"https://{api_server}/api/settings"
+                response = requests.get(api_url, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                data = response.json()
+                if data["status"] == "success":
+                    config = data["client_tunnel_settings"]
+                else:
+                    logging.error(f"Error getting configuration from new API server: {data.get('message')}")
+                    sys.exit(1)
 
             logging.debug("Tunnel configuration:")
             for setting, value in config.items():
@@ -114,6 +151,7 @@ def main():
                 else:
                     logging.debug(f"{setting}: {value}")
 
+            # endpoint1 settings
             endpoint1_short, _ = config["endpoint1"].split(":")
             endpoint1_ip = resolve_hostname(endpoint1_short)
 
@@ -131,8 +169,7 @@ def main():
                     f'PLUGGIE_DNS="{config["dns"]}"',
                     f'PLUGGIE_ENDPOINT1_SHORT="{endpoint1_short}"',
                     f'PLUGGIE_ENDPOINT1_IP="{endpoint1_ip}"',
-                    # f'PLUGGIE_ENDPOINT1_IP_INT="{config["allowed_ips1"].split(",")[0].split("/")[0]}"'
-                    f'PLUGGIE_ENDPOINT1_IP_INT="10.150.0.1"'
+                    f'PLUGGIE_ENDPOINT1_IP_INT="{config["allowed_ips1"].split(",")[0].split("/")[0]}"'
                 ]
                 f.write('\n'.join(f"export {line}" for line in config_lines))
 

@@ -12,16 +12,32 @@ check_dns() {
 
 # Function to restart WireGuard
 restart_wireguard() {
-    bashio::log.warning "Stopping WireGuard interface.."
-    if wg-quick down "${PLUGGIE_INTERFACE1}" 2>/dev/null; then
-        bashio::log.warning "WireGuard interface stopped successfully."
+    bashio::log.debug "Stopping WireGuard interface.."
+    # Capture output from wg-quick down
+    if wg-quick down "${PLUGGIE_INTERFACE1}" 2>&1 | while IFS= read -r line; do
+        if [[ $line == \[#\]* ]]; then
+            command="${line#*\] }"
+            bashio::log.debug "WireGuard command: ${command}"
+        else
+            bashio::log.debug "WireGuard: ${line}"
+        fi
+    done; then
+        bashio::log.debug "WireGuard interface stopped successfully."
     else
         bashio::log.warning "Failed to stop WireGuard interface. It may not have been running. Continuing.."
     fi
 
-    bashio::log.warning "Starting WireGuard interface.."
-    if wg-quick up "${PLUGGIE_INTERFACE1}"; then
-        bashio::log.warning "WireGuard interface started successfully."
+    bashio::log.debug "Starting WireGuard interface.."
+    # Capture output from wg-quick up
+    if wg-quick up "${PLUGGIE_INTERFACE1}" 2>&1 | while IFS= read -r line; do
+        if [[ $line == \[#\]* ]]; then
+            command="${line#*\] }"
+            bashio::log.debug "WireGuard command: ${command}"
+        else
+            bashio::log.debug "WireGuard: ${line}"
+        fi
+    done; then
+        bashio::log.debug "WireGuard interface started successfully."
         return 0
     else
         bashio::log.error "Failed to start WireGuard interface."
@@ -130,14 +146,14 @@ fi
 if [ "${vpn_restart_needed}" = true ]; then
     bashio::log.warning "Refreshing Pluggie configuration from API server.."
     if /usr/local/bin/get_config.py $(bashio::config 'configuration.access_key'); then
-        bashio::log.warning "Pluggie configuration refreshed."
+        bashio::log.debug "Pluggie configuration refreshed."
 
         bashio::log.warning "Restarting WireGuard interface ${PLUGGIE_INTERFACE1}.."
         if restart_wireguard; then
-            bashio::log.warning "Successfully restarted WireGuard interface ${PLUGGIE_INTERFACE1}."
+            bashio::log.debug "Successfully restarted WireGuard interface ${PLUGGIE_INTERFACE1}."
             if [ "${CURRENT_ENDPOINT_IP}" != "${PLUGGIE_ENDPOINT1_IP}" ]; then
                 sed -i "/^export PLUGGIE_ENDPOINT1_IP/c\export PLUGGIE_ENDPOINT1_IP=\"${CURRENT_ENDPOINT_IP}\"" /etc/pluggie.conf
-                bashio::log.warning "Updated PLUGGIE_ENDPOINT1_IP in /etc/pluggie.conf"
+                bashio::log.debug "Updated PLUGGIE_ENDPOINT1_IP in /etc/pluggie.conf"
             fi
 
             # Restart nginx and refresh letsencrypt after wireguard
@@ -155,7 +171,7 @@ if [ "${vpn_restart_needed}" = true ]; then
             if wg show "${PLUGGIE_INTERFACE1}" >/dev/null 2>&1; then
                 bashio::log.warning "Stopping disabled WireGuard interface.."
                 wg-quick down "${PLUGGIE_INTERFACE1}" 2>/dev/null
-                bashio::log.warning "WireGuard interface stopped."
+                bashio::log.debug "WireGuard interface stopped."
             fi
         else
             bashio::log.error "Failed to refresh Pluggie configuration"

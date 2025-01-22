@@ -1,3 +1,7 @@
+## v0.2.5.5
+
+- improved logging
+
 ## v0.2.5.4
 
 - update alpine to 3.21

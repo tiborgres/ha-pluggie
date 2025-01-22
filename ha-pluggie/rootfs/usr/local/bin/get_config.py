@@ -10,40 +10,35 @@ import logging
 from wireguard_tools import WireguardKey
 
 def setup_logging():
-    """Setup logging to work with bashio format"""
-    import sys
-    from datetime import datetime
+    """Setup logging to work with bashio"""
+    bashio_to_python = {
+        'all': logging.DEBUG,
+        'trace': logging.DEBUG,
+        'debug': logging.DEBUG,
+        'info': logging.INFO,
+        'notice': logging.INFO,
+        'warning': logging.WARNING,
+        'error': logging.ERROR,
+        'fatal': logging.CRITICAL,
+        'off': logging.CRITICAL + 10
+    }
 
-    class BashioLogger:
-        def _log(self, level, msg, *args):
-            if args:
-                msg = msg % args
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            # Format: [HH:MM:SS] LEVEL: message
-            print(f"[{timestamp}] {level.upper()}: {msg}", file=sys.stderr)
+    # Get log level from environment
+    bashio_log_level = os.environ.get('LOG_LEVEL', 'info').lower()
+    python_log_level = bashio_to_python.get(bashio_log_level, logging.INFO)
 
-        def debug(self, msg, *args):
-            self._log('debug', msg, *args)
+    # Remove any existing handlers
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
 
-        def info(self, msg, *args):
-            self._log('info', msg, *args)
-
-        def warning(self, msg, *args):
-            self._log('warning', msg, *args)
-
-        def error(self, msg, *args):
-            self._log('error', msg, *args)
-
-        def fatal(self, msg, *args):
-            self._log('fatal', msg, *args)
-
-        def critical(self, msg, *args):
-            self._log('fatal', msg, *args)
-
-    # Replace the logging module's functions with bashio logger
-    bashio_logger = BashioLogger()
-    for name in ['debug', 'info', 'warning', 'error', 'fatal', 'critical']:
-        setattr(logging, name, getattr(bashio_logger, name))
+    # Configure logging with exact bashio format
+    logging.basicConfig(
+        format='[%(asctime)s] %(levelname)s: %(message)s',
+        datefmt='%H:%M:%S',
+        level=python_log_level,
+        force=True
+    )
 
 def load_config_from_file(file_path):
     config = {}

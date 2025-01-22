@@ -41,7 +41,7 @@ fi
 # Connect to API server and get tunnel configuration
 if bashio::config.has_value "configuration.access_key"; then
     api_connected=0
-    export LOG_LEVEL=$(bashio::config '__BASHIO_LOG_LEVEL' 'info')
+    export LOG_LEVEL=$(bashio::config 'log_level' 'info')
     # try connect in loop
     while [ ${api_connected} -eq 0 ]; do
         bashio::log.debug "Connecting to Pluggie API..."

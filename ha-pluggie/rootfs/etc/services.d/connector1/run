@@ -31,9 +31,18 @@ bashio::log.debug "Network stack is ready, starting Pluggie Connector.."
 export WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1
 
 # Start Wireguard
-if [[ "${__BASHIO_LOG_LEVEL}" -ge "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
+if [[ "${log_level}" == "debug" ]]; then
     # If debug level, show all output
-    wg-quick up "${PLUGGIE_INTERFACE1}"
+    bashio::log.debug "Starting WireGuard interface ${PLUGGIE_INTERFACE1}..."
+    wg-quick up "${PLUGGIE_INTERFACE1}" 2>&1 | while IFS= read -r line; do
+        if [[ $line == \[#\]* ]]; then
+            # Extract the command part after [#] and trim whitespace
+            command="${line#*\] }"
+            bashio::log.debug "WireGuard command: ${command}"
+        else
+            bashio::log.debug "WireGuard: ${line}"
+        fi
+    done
 else
     # Otherwise suppress WireGuard output
     wg-quick up "${PLUGGIE_INTERFACE1}" > /dev/null 2>&1

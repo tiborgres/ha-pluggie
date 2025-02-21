@@ -118,7 +118,10 @@ bashio::log.debug "PLUGGIE_INTERFACE1: ${PLUGGIE_INTERFACE1}"
 # Check if hostname or endpoint IP changed
 if [ "${HOSTNAME_IP}" != "${CURRENT_ENDPOINT_IP}" ]; then
     bashio::log.error "Hostname IP (${HOSTNAME_IP}) does not match endpoint IP (${CURRENT_ENDPOINT_IP})"
+    bashio::log.info "Waiting for DNS propagation. Sleeping for 60 seconds to run loop again"
     vpn_restart_needed=true
+    # sleep 60
+    exit 1
 fi
 
 # Check if endpoint IP changed

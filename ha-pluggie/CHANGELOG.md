@@ -1,3 +1,7 @@
+## v0.2.5.6
+
+- fix for Hostname IP and Pluggie endpoint IP mismatch
+
 ## v0.2.5.5
 
 - improved logging

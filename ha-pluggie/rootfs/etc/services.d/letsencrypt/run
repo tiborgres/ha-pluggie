@@ -120,8 +120,9 @@ then
   bashio::log.error "Hostname(s) ${HNAMES} must point to Pluggie servers."
   bashio::log.error "Please create 'CNAME' DNS record pointing to '${PLUGGIE_ENDPOINT1_SHORT}'"
   # 'sleep 60' instead of 'kill -TERM 1' to keep running for case the DNS records will become valid again
-  bashio::log.info "Sleeping for 60 seconds to run loop again"
+  bashio::log.info "Waiting for DNS propagation. Sleeping for 60 seconds to run loop again"
   sleep 60
+  exec $0
   # kill -TERM 1
 else
   bashio::log.debug "All DNS records for ${HNAMES} valid."

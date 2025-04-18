@@ -292,33 +292,41 @@
             let proxiedHostValid = true;
 
             if (proxiedHost !== '') {
-                // Regular expression for valid URL with http/https
-                const urlRegex = /^(https?:\/\/)([\w-]+(\.[\w-]+)+)(:\d+)?(\/[\w-./?%&=]*)?$/;
-
-                if (!urlRegex.test(proxiedHost)) {
-                    proxiedHostValid = false;
-                    showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL format. Please enter a valid URL in the format http(s)://hostname(:port)(/path)');
-                } else {
-                    // Additional check with URL object
-                    try {
-                        const urlObj = new URL(proxiedHost);
-                        if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
-                            proxiedHostValid = false;
-                            showFieldError(proxiedHostInput, proxiedHostError, 'URL must start with http:// or https://');
-                        } else {
-                            // Check for multiple protocol specifications
-                            const protocolCount = (proxiedHost.match(/https?:\/\//g) || []).length;
-                            if (protocolCount > 1) {
-                                proxiedHostValid = false;
-                                showFieldError(proxiedHostInput, proxiedHostError, 'URL contains multiple protocol prefixes (http:// or https://)');
-                            } else {
-                                showFieldSuccess(proxiedHostInput, proxiedHostError, '');
-                            }
-                        }
-                    } catch (e) {
+                try {
+                    // Special check for single slash after protocol
+                    if (/^https?:\/([^\/])/.test(proxiedHost)) {
                         proxiedHostValid = false;
-                        showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL. Please check the format.');
+                        showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL format: protocol must be followed by double slash (https://)');
+                        return;
                     }
+
+                    const url = new URL(proxiedHost);
+
+                    // Verify protocol is http or https
+                    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                        proxiedHostValid = false;
+                        showFieldError(proxiedHostInput, proxiedHostError, 'URL must start with http:// or https://');
+                    } else {
+                        // Special check for hostname followed by colon without port
+                        const hostnameColonCheck = /^https?:\/\/[^\/]+:(?!\d+)/;
+                        if (hostnameColonCheck.test(proxiedHost)) {
+                            proxiedHostValid = false;
+                            showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL format: hostname followed by colon must include a port number');
+                            return;
+                        }
+
+                        // Check for double protocol - either multiple http:// or embedded protocol in pathname
+                        const protocolCount = (proxiedHost.match(/https?:\/\//g) || []).length;
+                        if (protocolCount > 1 || url.pathname.includes('://')) {
+                            proxiedHostValid = false;
+                            showFieldError(proxiedHostInput, proxiedHostError, 'URL contains multiple protocol prefixes (http:// or https://)');
+                        } else {
+                            showFieldSuccess(proxiedHostInput, proxiedHostError, '');
+                        }
+                    }
+                } catch (e) {
+                    proxiedHostValid = false;
+                    showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL format. Please enter a valid URL like http://hostname:port/path');
                 }
             } else {
                 resetField(proxiedHostInput, proxiedHostError);

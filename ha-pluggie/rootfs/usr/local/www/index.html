@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pluggie Admin</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0/dist/css/tabler.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        body {
+            background-color: #f5f7fb;
+        }
+        .page-wrapper {
+            padding: 1.5rem 0;
+        }
+        .access-key-wrapper {
+            position: relative;
+        }
+        .access-key-masked {
+            cursor: pointer;
+        }
+        .access-key-edit-btn {
+            position: absolute;
+            right: 45px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        .password-strength-meter {
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        .form-label-floating .form-control.is-valid {
+            border-color: #2fb344;
+            border-width: 2px;
+        }
+        .form-label-floating .form-control.is-invalid {
+            border-color: #d63939;
+            border-width: 2px;
+        }
+        .navbar-brand img {
+            height: 1.3em;
+            width: auto;
+            filter: invert(1);
+        }
+        @media (max-width: 767.98px) {
+            .navbar-brand img {
+                height: 1.2em;
+            }
+        }
+    </style>
+</head>
+
+<body class="theme-light">
+    <div class="page">
+        <header class="navbar navbar-expand-md navbar-light d-print-none">
+            <div class="container-xl">
+                <h1 class="navbar-brand navbar-brand-autodark d-none-navbar-horizontal pe-0 pe-md-3">
+                    <a href="/" class="d-flex align-items-center">
+                        <img src="logo.png" alt="Pluggie Admin">
+                    </a>
+                </h1>
+            </div>
+        </header>
+
+        <div class="page-wrapper">
+            <div class="page-body">
+                <div class="container-xl">
+                    <div class="row justify-content-center">
+                        <div class="col-12 col-md-8 col-lg-6 col-xl-5">
+                            <div class="text-center mb-4">
+                                <h2>Settings</h2>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-body">
+                                    <form id="configForm">
+                                        <!-- Hostname -->
+                                        <div id="hostname-container" class="mb-3" style="display: none;">
+                                            <label class="form-label">Hostname</label>
+                                            <div class="d-flex align-items-center">
+                                                <span id="hostname-display" class="form-control bg-light"></span>
+                                                <button type="button" class="btn btn-icon btn-ghost-secondary ms-2" onclick="copyToClipboard(document.getElementById('hostname-display').textContent, this)">
+                                                    <i class="ti ti-copy"></i>
+                                                </button>
+                                            </div>
+                                            <small class="form-hint">Hostname can be changed in your <a href="https://my.pluggie.net" target="_blank">my.pluggie.net</a> account</small>
+                                        </div>
+
+                                        <!-- Access Key -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Access Key</label>
+                                            <div class="access-key-wrapper">
+                                                <div id="access-key-masked-container">
+                                                    <div class="d-flex align-items-center">
+                                                        <input type="text" id="access_key" name="access_key" class="form-control" value="">
+                                                        <button type="button" class="btn btn-icon btn-ghost-secondary ms-2" onclick="copyAccessKey(this)">
+                                                            <i class="ti ti-copy"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <small id="accessKeyStatus" class="form-text"></small>
+                                            <small class="form-hint">Your Pluggie access key</small>
+                                        </div>
+
+                                        <!-- Log Level -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Log Level</label>
+                                            <select class="form-select" id="log_level" name="log_level">
+                                                <option value="debug">Debug</option>
+                                                <option value="info">Info</option>
+                                                <option value="warning">Warning</option>
+                                                <option value="error">Error</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Proxied Host -->
+                                        <div class="mb-3" id="proxied-host-setting">
+                                            <label class="form-label">Proxied Host</label>
+                                            <input type="text" class="form-control" id="proxied_host" name="proxied_host" placeholder="loading...">
+                                            <div id="proxiedHostError" class="invalid-feedback"></div>
+                                            <small class="form-hint">URL of the host to proxy through the tunnel (e.g. http://localhost:8080)</small>
+                                        </div>
+
+                                        <!-- Advanced Settings Toggle -->
+                                        <div class="mb-3">
+                                            <button type="button" id="advanced-toggle" class="btn btn-outline-secondary w-100" onclick="toggleAdvancedSettings()">
+                                                <span>Show Advanced Settings</span>
+                                                <i class="ti ti-chevron-down ms-2"></i>
+                                            </button>
+                                        </div>
+
+                                        <!-- Advanced Settings Section -->
+                                        <div id="advanced-settings" class="d-none">
+
+                                            <!-- Basic Auth Settings -->
+                                            <div class="card mt-4 mb-4 bg-light">
+                                                <div class="card-header">
+                                                    <h4 class="card-title">Basic Authentication (Optional)</h4>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Username</label>
+                                                        <input type="text" class="form-control" id="basic_auth_username" name="basic_auth_username">
+                                                        <div id="basicAuthUsernameError" class="invalid-feedback"></div>
+                                                        <small class="form-hint">Username for basic authentication</small>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Password</label>
+                                                        <div class="input-group">
+                                                            <input type="password" class="form-control" id="basic_auth_password" name="basic_auth_password">
+                                                            <button type="button" class="btn btn-outline-secondary" onclick="togglePasswordVisibility()">
+                                                                <i id="password-toggle-icon" class="ti ti-eye"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div id="basicAuthPasswordError" class="invalid-feedback"></div>
+                                                        <small class="form-hint">Password for basic authentication</small>
+                                                        <!-- Password strength meter -->
+                                                        <div class="password-strength-meter" style="display: none;">
+                                                            <div class="progress" style="height: 2px;">
+                                                                <div id="password-strength-bar" class="progress-bar bg-secondary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                                            </div>
+                                                        </div>
+                                                        <small id="password-strength-text" class="form-text text-muted" style="display: none;"></small>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Let's Encrypt Settings -->
+                                            <div class="card mt-4 mb-4 bg-light">
+                                                <div class="card-header">
+                                                    <h4 class="card-title">Let's Encrypt Settings (Optional)</h4>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">ACME Root CA Certificate</label>
+                                                        <textarea class="form-control" id="acme_root_ca_cert" name="acme_root_ca_cert" rows="4"></textarea>
+                                                        <div id="acmeCertError" class="invalid-feedback"></div>
+                                                        <small class="form-hint">Custom root CA for ACME</small>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">ACME Server</label>
+                                                        <input type="text" class="form-control" id="acme_server" name="acme_server">
+                                                        <div id="acmeServerError" class="invalid-feedback"></div>
+                                                        <small class="form-hint">Custom ACME server URL</small>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Key Type</label>
+                                                        <select class="form-select" id="key_type" name="key_type">
+                                                            <option value="rsa">RSA</option>
+                                                            <option value="ecdsa">ECDSA</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Elliptic Curve</label>
+                                                        <select class="form-select" id="elliptic_curve" name="elliptic_curve">
+                                                            <option value="secp256r1">secp256r1</option>
+                                                            <option value="secp384r1">secp384r1</option>
+                                                            <option value="secp521r1">secp521r1</option>
+                                                        </select>
+                                                        <small class="form-hint">Used when key type is ECDSA</small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="form-footer">
+                                            <button type="button" id="saveButton" class="btn btn-primary" onclick="saveConfig()">Save Settings</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.0/dist/js/tabler.min.js"></script>
+
+    <script>
+        let currentAccessKey = '';
+        let isDockerPluggie = true;
+        let formChanged = false;
+        let isFormValid = false;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            detectAddonType();
+            loadConfig();
+            setupValidation();
+        });
+
+        function setupValidation() {
+            const form = document.getElementById('configForm');
+            const inputs = form.querySelectorAll('input, select, textarea');
+
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    if (!input.hasAttribute('data-initial-load')) {
+                        formChanged = true;
+                    }
+                    validateForm();
+                    input.removeAttribute('data-initial-load');
+                });
+
+                input.addEventListener('change', function() {
+                    if (!input.hasAttribute('data-initial-load')) {
+                        formChanged = true;
+                    }
+                    validateForm();
+                    input.removeAttribute('data-initial-load');
+                });
+
+                input.setAttribute('data-initial-load', 'true');
+            });
+
+            document.getElementById('access_key').addEventListener('input', validateForm);
+            document.getElementById('proxied_host').addEventListener('input', validateForm);
+            document.getElementById('basic_auth_username').addEventListener('input', validateForm);
+            document.getElementById('basic_auth_password').addEventListener('input', updatePasswordStrength);
+            document.getElementById('acme_server').addEventListener('input', validateForm);
+
+            document.getElementById('access_key').addEventListener('click', function() { this.select(); });
+
+            updateSaveButton();
+        }
+
+        function validateForm() {
+            const accessKeyInput = document.getElementById('access_key');
+            const accessKey = accessKeyInput ? accessKeyInput.value : currentAccessKey;
+            const accessKeyStatus = document.getElementById('accessKeyStatus');
+            let accessKeyValid = true;
+
+            if (!accessKey || accessKey.trim() === '') {
+                accessKeyValid = false;
+                showFieldError(accessKeyInput, accessKeyStatus, 'Access Key is required');
+            } else if (!/^[A-Za-z0-9_]{32}$/.test(accessKey)) {
+                accessKeyValid = false;
+                showFieldError(accessKeyInput, accessKeyStatus, 'Access Key must be exactly 32 characters and contain only letters, numbers, and underscores');
+            } else {
+                showFieldSuccess(accessKeyInput, accessKeyStatus, 'Access Key format is valid');
+            }
+
+            const proxiedHost = document.getElementById('proxied_host').value.trim();
+            const proxiedHostError = document.getElementById('proxiedHostError');
+            const proxiedHostInput = document.getElementById('proxied_host');
+            let proxiedHostValid = true;
+
+            if (proxiedHost !== '') {
+                // Regular expression for valid URL with http/https
+                const urlRegex = /^(https?:\/\/)([\w-]+(\.[\w-]+)+)(:\d+)?(\/[\w-./?%&=]*)?$/;
+
+                if (!urlRegex.test(proxiedHost)) {
+                    proxiedHostValid = false;
+                    showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL format. Please enter a valid URL in the format http(s)://hostname(:port)(/path)');
+                } else {
+                    // Additional check with URL object
+                    try {
+                        const urlObj = new URL(proxiedHost);
+                        if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+                            proxiedHostValid = false;
+                            showFieldError(proxiedHostInput, proxiedHostError, 'URL must start with http:// or https://');
+                        } else {
+                            // Check for multiple protocol specifications
+                            const protocolCount = (proxiedHost.match(/https?:\/\//g) || []).length;
+                            if (protocolCount > 1) {
+                                proxiedHostValid = false;
+                                showFieldError(proxiedHostInput, proxiedHostError, 'URL contains multiple protocol prefixes (http:// or https://)');
+                            } else {
+                                showFieldSuccess(proxiedHostInput, proxiedHostError, '');
+                            }
+                        }
+                    } catch (e) {
+                        proxiedHostValid = false;
+                        showFieldError(proxiedHostInput, proxiedHostError, 'Invalid URL. Please check the format.');
+                    }
+                }
+            } else {
+                resetField(proxiedHostInput, proxiedHostError);
+            }
+
+            const username = document.getElementById('basic_auth_username').value;
+            const password = document.getElementById('basic_auth_password').value;
+            const usernameError = document.getElementById('basicAuthUsernameError');
+            const passwordError = document.getElementById('basicAuthPasswordError');
+            const usernameInput = document.getElementById('basic_auth_username');
+            const passwordInput = document.getElementById('basic_auth_password');
+            let usernameValid = true;
+            let passwordValid = true;
+
+            if ((username && !password) || (!username && password)) {
+                if (username && !password) {
+                    showFieldError(passwordInput, passwordError, 'Password is required when username is set');
+                    resetField(usernameInput, usernameError);
+                    passwordValid = false;
+                } else {
+                    showFieldError(usernameInput, usernameError, 'Username is required when password is set');
+                    resetField(passwordInput, passwordError);
+                    usernameValid = false;
+                }
+            } else if (username && password) {
+                if (!/^[a-zA-Z0-9_]{3,}$/.test(username)) {
+                    usernameValid = false;
+                    showFieldError(usernameInput, usernameError, 'Username must be at least 3 characters and contain only letters, numbers and underscores');
+                } else {
+                    showFieldSuccess(usernameInput, usernameError, '');
+                }
+
+                if (password.length < 8) {
+                    passwordValid = false;
+                    showFieldError(passwordInput, passwordError, 'Password must be at least 8 characters');
+                } else {
+                    showFieldSuccess(passwordInput, passwordError, '');
+                }
+            } else {
+                resetField(usernameInput, usernameError);
+                resetField(passwordInput, passwordError);
+            }
+
+            const acmeServer = document.getElementById('acme_server').value;
+            const acmeServerError = document.getElementById('acmeServerError');
+            const acmeServerInput = document.getElementById('acme_server');
+            let acmeServerValid = true;
+
+            if (acmeServer && acmeServer.trim() !== '') {
+                try {
+                    const urlObj = new URL(acmeServer);
+                    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+                        acmeServerValid = false;
+                        showFieldError(acmeServerInput, acmeServerError, 'Please enter a valid URL starting with http:// or https://');
+                    } else {
+                        showFieldSuccess(acmeServerInput, acmeServerError, '');
+                    }
+                } catch (e) {
+                    acmeServerValid = false;
+                    showFieldError(acmeServerInput, acmeServerError, 'Please enter a valid URL starting with http:// or https://');
+                }
+            } else {
+                resetField(acmeServerInput, acmeServerError);
+            }
+
+            isFormValid = accessKeyValid && proxiedHostValid && usernameValid && passwordValid && acmeServerValid;
+
+            updateSaveButton();
+
+            return isFormValid;
+        }
+
+        function showFieldError(inputElement, errorElement, message) {
+            inputElement.classList.add('is-invalid');
+            inputElement.classList.remove('is-valid');
+
+            if (errorElement.tagName === 'SMALL') {
+                errorElement.textContent = message;
+                errorElement.className = 'form-text text-danger';
+            } else {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+            }
+        }
+
+        function showFieldSuccess(inputElement, errorElement, message) {
+            inputElement.classList.add('is-valid');
+            inputElement.classList.remove('is-invalid');
+
+            if (errorElement.tagName === 'SMALL') {
+                errorElement.textContent = message || '';
+                errorElement.className = message ? 'form-text text-success' : 'form-text';
+            } else {
+                errorElement.textContent = '';
+                errorElement.style.display = 'none';
+            }
+        }
+
+        function resetField(inputElement, errorElement) {
+            inputElement.classList.remove('is-valid', 'is-invalid');
+
+            if (errorElement.tagName === 'SMALL') {
+                errorElement.textContent = '';
+                errorElement.className = 'form-text';
+            } else {
+                errorElement.textContent = '';
+                errorElement.style.display = 'none';
+            }
+        }
+
+        function updatePasswordStrength() {
+            const password = document.getElementById('basic_auth_password').value;
+            const strengthMeter = document.querySelector('.password-strength-meter');
+            const strengthBar = document.getElementById('password-strength-bar');
+            const strengthText = document.getElementById('password-strength-text');
+
+            validateForm();
+
+            if (!password || password.length === 0) {
+                strengthMeter.style.display = 'none';
+                strengthText.style.display = 'none';
+                return;
+            }
+
+            strengthMeter.style.display = 'block';
+            strengthText.style.display = 'block';
+
+            let strength = 0;
+            if (password.length >= 8) strength += 25;
+            if (/[A-Z]/.test(password)) strength += 25;
+            if (/[a-z]/.test(password)) strength += 25;
+            if (/[0-9]/.test(password)) strength += 12.5;
+            if (/[^A-Za-z0-9]/.test(password)) strength += 12.5;
+
+            strengthBar.style.width = strength + '%';
+            strengthBar.setAttribute('aria-valuenow', strength);
+
+            let requirements = [];
+            if (password.length < 8) requirements.push('at least 8 characters');
+            if (!/[A-Z]/.test(password)) requirements.push('one uppercase letter');
+            if (!/[a-z]/.test(password)) requirements.push('one lowercase letter');
+            if (!/[0-9]/.test(password)) requirements.push('one number');
+            if (!/[^A-Za-z0-9]/.test(password)) requirements.push('one special character');
+
+            if (strength < 50) {
+                strengthBar.className = 'progress-bar bg-danger';
+                strengthText.className = 'form-text text-danger';
+            } else if (strength < 75) {
+                strengthBar.className = 'progress-bar bg-warning';
+                strengthText.className = 'form-text text-warning';
+            } else {
+                strengthBar.className = 'progress-bar bg-success';
+                strengthText.className = 'form-text text-success';
+            }
+
+            if (requirements.length > 0) {
+                strengthText.textContent = `Still missing: ${requirements.join(', ')}`;
+            } else {
+                strengthText.textContent = 'Password meets all requirements';
+            }
+        }
+
+        function updateSaveButton() {
+            const saveButton = document.getElementById('saveButton');
+
+            if (isFormValid) {
+                saveButton.disabled = false;
+                saveButton.classList.remove('opacity-50');
+            } else {
+                saveButton.disabled = true;
+                saveButton.classList.add('opacity-50');
+            }
+        }
+
+        async function detectAddonType(retryCount = 0) {
+            try {
+                const response = await fetch('./pluggie/api/edition');
+                const responseText = await response.text();
+
+                try {
+                    const data = JSON.parse(responseText);
+
+                    isDockerPluggie = data.edition === 'docker';
+
+                    const proxiedHostInput = document.getElementById('proxied_host');
+                    if (proxiedHostInput) {
+                        if (isDockerPluggie) {
+                            proxiedHostInput.placeholder = "http://localhost:8080";
+                        } else {
+                            proxiedHostInput.placeholder = "http://homeassistant.local.hass.io:8123";
+                        }
+                    }
+
+                    const proxiedHostField = document.getElementById('proxied-host-setting');
+                    const logLevelField = document.getElementById('log_level').closest('.mb-3');
+                    const advancedSettings = document.getElementById('advanced-settings');
+
+                    if (proxiedHostField && logLevelField && advancedSettings) {
+                        if (isDockerPluggie) {
+                            if (proxiedHostField.parentElement === advancedSettings) {
+                                advancedSettings.removeChild(proxiedHostField);
+                                logLevelField.after(proxiedHostField);
+                            }
+                        } else {
+                            if (proxiedHostField.parentElement !== advancedSettings) {
+                                if (proxiedHostField.parentElement) {
+                                    proxiedHostField.parentElement.removeChild(proxiedHostField);
+                                }
+                                const firstCardInAdvanced = advancedSettings.querySelector('.card');
+                                if (firstCardInAdvanced) {
+                                    advancedSettings.insertBefore(proxiedHostField, firstCardInAdvanced);
+                                } else {
+                                    advancedSettings.appendChild(proxiedHostField);
+                                }
+                            }
+                        }
+                    }
+
+                    console.log(`Detected addon type: ${isDockerPluggie ? 'docker-pluggie' : 'ha-pluggie'}`);
+                } catch (parseError) {
+                    console.error('Error parsing JSON response:', parseError);
+                    console.error('Raw response:', responseText);
+
+                    // Retry logic for parse errors
+                    if (retryCount < 3) {
+                        console.log(`Retrying addon type detection (${retryCount + 1}/3) in 1 second...`);
+                        setTimeout(() => detectAddonType(retryCount + 1), 1000);
+                    }
+                }
+            } catch (error) {
+                console.error('Network error detecting addon type:', error);
+
+                // Retry logic for network errors
+                if (retryCount < 3) {
+                    console.log(`Retrying addon type detection (${retryCount + 1}/3) in 1 second...`);
+                    setTimeout(() => detectAddonType(retryCount + 1), 1000);
+                }
+            }
+        }
+
+        async function checkPluggieStatus(retryCount = 0) {
+            try {
+                const accessKeyInput = document.getElementById('access_key');
+                const currentAccessKey = accessKeyInput ? accessKeyInput.value : '';
+                const originalAccessKey = accessKeyInput.getAttribute('data-original') || '';
+                const keyJustChanged = currentAccessKey !== originalAccessKey && currentAccessKey.length >= 32;
+
+                let hasBasicConnectivity = true;
+
+                if (isDockerPluggie) {
+                    try {
+                        const connectivityCheck = await fetch('./pluggie/api/health', {
+                            method: 'HEAD',
+                            cache: 'no-cache'
+                        });
+                        hasBasicConnectivity = connectivityCheck.ok;
+                    } catch (error) {
+                        console.warn('Basic API connectivity check failed:', error);
+                        hasBasicConnectivity = false;
+
+                        // Retry logic for connectivity check
+                        if (retryCount < 3) {
+                            console.log(`Retrying connectivity check (${retryCount + 1}/3) in 1 second...`);
+                            setTimeout(() => checkPluggieStatus(retryCount + 1), 1000);
+                            return;
+                        }
+                    }
+                } else {
+                    console.log('Skipping connectivity check in Home Assistant environment');
+                }
+
+                if (hasBasicConnectivity || retryCount >= 3 || !isDockerPluggie) {
+                    const response = await fetch('./pluggie/api/status');
+                    const data = await response.json();
+
+                    const accessKeyStatus = document.getElementById('accessKeyStatus');
+
+                    if (data.status === 'invalid_key' && currentAccessKey.length >= 32) {
+                        showFieldError(accessKeyInput, accessKeyStatus,
+                            'Access Key rejected by server. Please enter a valid Access Key.');
+                        return;
+                    }
+
+                    if (keyJustChanged && data.status !== 'enabled' && data.status !== 'disabled') {
+                        showFieldWarning(accessKeyInput, accessKeyStatus,
+                            'Verifying Access Key, please wait...');
+
+                        setTimeout(() => checkPluggieStatus(), 2000);
+                        return;
+                    }
+
+                    if (data.status === 'invalid_key') {
+                        if (data.connectivity_issue && hasBasicConnectivity) {
+                            showFieldWarning(accessKeyInput, accessKeyStatus,
+                                'Cannot verify Access Key due to connectivity issues. Services will continue to run with existing configuration.');
+                        } else {
+                            showFieldError(accessKeyInput, accessKeyStatus,
+                                'Access Key rejected by server. Please enter a valid Access Key.');
+                        }
+                    } else if (data.status === 'connectivity_issue') {
+                        showFieldWarning(accessKeyInput, accessKeyStatus,
+                            'Connectivity issues detected. Services will continue to run with existing configuration.');
+                    } else if (data.status === 'disabled') {
+                        showFieldError(accessKeyInput, accessKeyStatus,
+                            'Your tunnel is currently disabled. Please contact support.');
+                    } else if (data.status === 'enabled') {
+                        showFieldSuccess(accessKeyInput, accessKeyStatus,
+                            'Access Key is valid and tunnel is enabled.');
+                    } else if (!hasBasicConnectivity) {
+                        showFieldWarning(accessKeyInput, accessKeyStatus,
+                            'Cannot verify Access Key status - API connection issue. Services will continue to run with existing configuration.');
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking Pluggie status:', error);
+                const accessKeyStatus = document.getElementById('accessKeyStatus');
+                const accessKeyInput = document.getElementById('access_key');
+
+                // Retry logic for API status check
+                if (retryCount < 3) {
+                    console.log(`Retrying status check (${retryCount + 1}/3) in 1 second...`);
+                    setTimeout(() => checkPluggieStatus(retryCount + 1), 1000);
+                    return;
+                }
+
+                showFieldWarning(accessKeyInput, accessKeyStatus,
+                    'Cannot verify Access Key status - service communication issue. Please try again later.');
+            }
+        }
+
+        function showFieldWarning(inputElement, errorElement, message) {
+            inputElement.classList.remove('is-invalid', 'is-valid');
+
+            const style = document.createElement('style');
+            style.textContent = `
+                .is-warning {
+                    border-color: #f59f00 !important;
+                    border-width: 2px !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            inputElement.classList.add('is-warning');
+
+            if (errorElement.tagName === 'SMALL') {
+                errorElement.textContent = message;
+                errorElement.className = 'form-text text-warning';
+                errorElement.style.color = '#f59f00';
+            } else {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                errorElement.style.color = '#f59f00';
+            }
+        }
+
+        async function loadConfig(retryCount = 0) {
+            try {
+                const response = await fetch('./pluggie/api/options');
+                const data = await response.json();
+
+                if (data.configuration && data.configuration.access_key) {
+                    currentAccessKey = data.configuration.access_key;
+                    updateAccessKeyDisplay();
+
+                    const hostnameContainer = document.getElementById('hostname-container');
+                    const hostnameDisplay = document.getElementById('hostname-display');
+
+                    if (data.pluggie_config && data.pluggie_config.hostname) {
+                        hostnameDisplay.textContent = data.pluggie_config.hostname;
+                        hostnameContainer.style.display = "block";
+                    } else {
+                        hostnameDisplay.textContent = "your-device.pluggie.net";
+                        hostnameContainer.style.display = "block";
+                    }
+                }
+
+                if (data.log_level) {
+                    document.getElementById('log_level').value = data.log_level;
+                }
+
+                const proxiedHostInput = document.getElementById('proxied_host');
+                if (data.proxied_host && data.proxied_host.trim() !== '') {
+                    proxiedHostInput.value = data.proxied_host;
+                } else {
+                    proxiedHostInput.value = '';
+                }
+
+                // Basic Auth
+                if (data.basic_auth_username) {
+                    document.getElementById('basic_auth_username').value = data.basic_auth_username;
+                }
+
+                if (data.basic_auth_password) {
+                    document.getElementById('basic_auth_password').value = data.basic_auth_password;
+                    updatePasswordStrength();
+                }
+
+                if (data.acme_root_ca_cert) {
+                    document.getElementById('acme_root_ca_cert').value = data.acme_root_ca_cert;
+                }
+
+                if (data.acme_server) {
+                    document.getElementById('acme_server').value = data.acme_server;
+                }
+
+                if (data.key_type) {
+                    document.getElementById('key_type').value = data.key_type;
+                }
+
+                if (data.elliptic_curve) {
+                    document.getElementById('elliptic_curve').value = data.elliptic_curve;
+                }
+
+                // Reset form changed flag after loading
+                formChanged = false;
+                validateForm();
+
+                if (isFormValid) {
+                    formChanged = false;
+                }
+
+                updateSaveButton();
+                await checkPluggieStatus();
+
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+
+                // Retry logic
+                if (retryCount < 3) {
+                    console.log(`Retrying configuration load (${retryCount + 1}/3) in 1 second...`);
+                    setTimeout(() => loadConfig(retryCount + 1), 1000);
+                    return;
+                }
+
+                showToast('Error loading configuration: ' + error.message, 'danger');
+            }
+        }
+
+        function updateAccessKeyDisplay() {
+            const accessKeyInput = document.getElementById('access_key');
+            if (accessKeyInput) {
+                accessKeyInput.value = currentAccessKey;
+                accessKeyInput.setAttribute('data-original', currentAccessKey);
+            }
+        }
+
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('basic_auth_password');
+            const icon = document.getElementById('password-toggle-icon');
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.classList.remove('ti-eye');
+                icon.classList.add('ti-eye-off');
+            } else {
+                passwordInput.type = 'password';
+                icon.classList.remove('ti-eye-off');
+                icon.classList.add('ti-eye');
+            }
+        }
+
+        function toggleAdvancedSettings(forceShow = null) {
+            const advancedSettings = document.getElementById('advanced-settings');
+            const toggleButton = document.getElementById('advanced-toggle');
+            const toggleSpan = toggleButton.querySelector('span');
+            const toggleIcon = toggleButton.querySelector('i');
+
+            const shouldShow = forceShow !== null ? forceShow : advancedSettings.classList.contains('d-none');
+
+            if (shouldShow) {
+                advancedSettings.classList.remove('d-none');
+                toggleButton.classList.remove('btn-outline-secondary');
+                toggleButton.classList.add('btn-primary');
+                toggleSpan.textContent = 'Hide Advanced Settings';
+                toggleIcon.classList.remove('ti-chevron-down');
+                toggleIcon.classList.add('ti-chevron-up');
+            } else {
+                advancedSettings.classList.add('d-none');
+                toggleButton.classList.remove('btn-primary');
+                toggleButton.classList.add('btn-outline-secondary');
+                toggleSpan.textContent = 'Show Advanced Settings';
+                toggleIcon.classList.remove('ti-chevron-up');
+                toggleIcon.classList.add('ti-chevron-down');
+            }
+        }
+
+        function copyAccessKey(button) {
+            if (!currentAccessKey) return;
+            copyToClipboard(currentAccessKey, button);
+        }
+
+        async function copyToClipboard(text, button) {
+            if (!text) return;
+
+            try {
+                await navigator.clipboard.writeText(text);
+                const originalIcon = button.innerHTML;
+                button.innerHTML = '<i class="ti ti-check"></i>';
+                showToast('Copied to clipboard!', 'success');
+                setTimeout(() => {
+                    button.innerHTML = originalIcon;
+                }, 2000);
+            } catch (error) {
+                showToast('Failed to copy to clipboard', 'danger');
+                console.error('Copy error:', error);
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                // Final validation before saving
+                if (!validateForm()) {
+                    showToast('Please correct the errors in the form', 'danger');
+                    return;
+                }
+
+                const accessKeyInput = document.getElementById('access_key');
+                const newAccessKey = accessKeyInput ? accessKeyInput.value : currentAccessKey;
+                const accessKeyChanged = newAccessKey !== accessKeyInput.getAttribute('data-original');
+
+                const formData = {
+                    configuration: {
+                        access_key: newAccessKey
+                    },
+                    log_level: document.getElementById('log_level').value,
+                    proxied_host: document.getElementById('proxied_host').value,
+                    basic_auth_username: document.getElementById('basic_auth_username').value,
+                    basic_auth_password: document.getElementById('basic_auth_password').value,
+                    acme_root_ca_cert: document.getElementById('acme_root_ca_cert').value,
+                    acme_server: document.getElementById('acme_server').value,
+                    key_type: document.getElementById('key_type').value,
+                    elliptic_curve: document.getElementById('elliptic_curve').value
+                };
+
+                // Disable save button and show loading state
+                const saveButton = document.getElementById('saveButton');
+                saveButton.disabled = true;
+                saveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
+
+                showToast('Saving configuration...', 'info');
+
+                // Send the configuration to the server
+                const response = await fetch('./pluggie/api/options', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+
+                if (data.status === "error") {
+                    // Handle validation errors from backend
+                    if (data.field === "proxied_host") {
+                        const proxiedHostInput = document.getElementById('proxied_host');
+                        const proxiedHostError = document.getElementById('proxiedHostError');
+                        showFieldError(proxiedHostInput, proxiedHostError, data.message);
+                    }
+
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = 'Save Settings';
+                    showToast(data.message, 'danger');
+                    return;
+                }
+
+                console.log("Options saved successfully:", data);
+
+                // Update UI to indicate configuration is being applied
+                saveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Restarting...';
+                showToast('Configuration saved, services are restarting...', 'success');
+
+                // Handle access key change
+                if (accessKeyChanged) {
+                    const accessKeyStatus = document.getElementById('accessKeyStatus');
+                    showFieldWarning(accessKeyInput, accessKeyStatus, 'Verifying Access Key, please wait...');
+
+                    setTimeout(() => {
+                        checkPluggieStatus();
+                    }, 3000);
+                }
+
+                formChanged = false;
+
+                // Reload page after a delay to see the applied changes
+                setTimeout(() => {
+                    location.reload();
+                }, 5000);
+            } catch (error) {
+                console.error("Error in save config:", error);
+
+                const saveButton = document.getElementById('saveButton');
+                saveButton.disabled = false;
+                saveButton.innerHTML = 'Save Settings';
+
+                showToast('Error: ' + error.message, 'danger');
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            // Close any existing toasts
+            const existingToasts = document.querySelectorAll('.toast-container .alert');
+            existingToasts.forEach(toast => toast.remove());
+
+            // Container for toasts
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                document.body.appendChild(toastContainer);
+            }
+
+            // Create new toast
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type} alert-dismissible fade show`;
+            toast.setAttribute('role', 'alert');
+
+            // Add appropriate icon based on type
+            let icon = 'info-circle';
+            if (type === 'success') icon = 'check';
+            else if (type === 'danger') icon = 'alert-circle';
+            else if (type === 'warning') icon = 'alert-triangle';
+
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="alert-icon">
+                        <i class="ti ti-${icon} icon alert-icon"></i>
+                    </div>
+                    <div>${message}</div>
+                </div>
+                <a class="btn-close" data-bs-dismiss="alert" aria-label="close"></a>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 150);
+            }, 3000);
+        }
+
+        function setupHomeAssistantDetection() {
+            const proxiedHostInput = document.getElementById('proxied_host');
+            const basicAuthUsername = document.getElementById('basic_auth_username');
+            const basicAuthPassword = document.getElementById('basic_auth_password');
+            const passwordToggleBtn = document.querySelector('button[onclick="togglePasswordVisibility()"]');
+
+            const warningBanner = document.createElement('div');
+            warningBanner.className = 'alert alert-warning mt-2 mb-0';
+            warningBanner.id = 'basic-auth-ha-warning';
+            warningBanner.innerHTML = '<i class="ti ti-alert-triangle me-2"></i>Basic authentication cannot be used with Home Assistant URLs. These fields have been disabled.';
+            warningBanner.style.display = 'none';
+
+            const basicAuthCards = document.querySelectorAll('.card-title');
+            let basicAuthCard = null;
+
+            for (let i = 0; i < basicAuthCards.length; i++) {
+                if (basicAuthCards[i].textContent.includes('Basic Authentication')) {
+                    basicAuthCard = basicAuthCards[i].closest('.card');
+                    break;
+                }
+            }
+
+            if (basicAuthCard) {
+                basicAuthCard.querySelector('.card-body').insertBefore(warningBanner, basicAuthCard.querySelector('.card-body').firstChild);
+            }
+
+            function isHomeAssistantUrl(url) {
+                return url && (url.includes('homeassistant') || url.includes('hass'));
+            }
+
+            function updateBasicAuthFields() {
+                const proxiedHost = proxiedHostInput.value;
+
+                if (isHomeAssistantUrl(proxiedHost)) {
+                    basicAuthUsername.disabled = true;
+                    basicAuthPassword.disabled = true;
+                    if (passwordToggleBtn) passwordToggleBtn.disabled = true;
+                    warningBanner.style.display = 'block';
+
+                    basicAuthUsername.value = '';
+                    basicAuthPassword.value = '';
+
+                    validateForm();
+                } else {
+                    basicAuthUsername.disabled = false;
+                    basicAuthPassword.disabled = false;
+                    if (passwordToggleBtn) passwordToggleBtn.disabled = false;
+                    warningBanner.style.display = 'none';
+
+                    validateForm();
+                }
+            }
+
+            proxiedHostInput.addEventListener('input', updateBasicAuthFields);
+            proxiedHostInput.addEventListener('change', updateBasicAuthFields);
+
+            setTimeout(updateBasicAuthFields, 500);
+        }
+
+        const originalDOMContentLoaded = window.onload || function() {};
+        window.onload = function() {
+            if (typeof originalDOMContentLoaded === 'function') {
+                originalDOMContentLoaded();
+            }
+            setupHomeAssistantDetection();
+        };
+
+        const originalLoadConfig = window.loadConfig;
+        window.loadConfig = async function(retryCount = 0) {
+            await originalLoadConfig(retryCount);
+
+            const proxiedHostInput = document.getElementById('proxied_host');
+            if (proxiedHostInput) {
+                const event = new Event('change');
+                proxiedHostInput.dispatchEvent(event);
+            }
+        };
+    </script>
+</body>
+</html>

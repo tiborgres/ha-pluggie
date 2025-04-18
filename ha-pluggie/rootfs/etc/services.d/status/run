@@ -1,0 +1,23 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Community Add-on: WireGuard Client
+# Shows current WireGuard status
+# ==============================================================================
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+sleep 60
+bashio::log.debug "Requesting current status from Wireguard."
+
+# Check if Endpoint IP address is still the same as it was at start of this addon
+# If not then restart the wg to connect to new (just resolved) IP address
+# Also check the Access Key validity
+if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" != "invalid_key" ]; then
+    /usr/local/bin/check_and_restart_wg.sh
+fi
+
+if [[ "${__BASHIO_LOG_LEVEL}" -ge "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
+    # If debug level, show all output
+    exec wg show
+fi

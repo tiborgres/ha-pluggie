@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Minimal implementation of Bashio command-line script for docker-pluggie
+
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+
+export __BASHIO_BIN
+export __BASHIO_LIB_DIR
+
+__BASHIO_BIN=$(readlink -f "${BASH_SOURCE[0]}")
+__BASHIO_LIB_DIR=$(dirname "${__BASHIO_BIN}")
+
+# Include Bashio library
+source "${__BASHIO_LIB_DIR}/bashio.sh"
+
+# Execute source
+BASH_ARGV0=${1:?script to source must be provided}
+shift
+source "$0" "$@"

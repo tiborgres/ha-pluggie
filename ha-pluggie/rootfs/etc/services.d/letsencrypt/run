@@ -1,0 +1,243 @@
+#!/usr/bin/with-contenv bashio
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+s6-svc -O /var/run/s6/legacy-services/letsencrypt
+
+# Check Access Key or /etc/pluggie.state. If not OK, no Letsencrypt
+access_key=$(bashio::config 'configuration.access_key')
+if [ "${access_key}" = "XXXXX" ] || [ -z "${access_key}" ] || { [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "invalid_key" ]; }; then
+    bashio::log.fatal "No valid Access Key configured. LetsEncrypt service will not start."
+
+    if [ ! -f "/etc/pluggie.state" ]; then
+        echo "invalid_key" > "/etc/pluggie.state"
+    fi
+
+    exit 0
+fi
+
+# Read environment variables from /data/pluggie.json
+PLUGGIE_INTERFACE1=$(bashio::config 'pluggie_config.interface1')
+PLUGGIE_ENDPOINT1_SHORT=$(bashio::config 'pluggie_config.endpoint1_short')
+PLUGGIE_HOSTNAME=$(bashio::config 'pluggie_config.hostname')
+PLUGGIE_EMAIL=$(bashio::config 'pluggie_config.email')
+PLUGGIE_KEYFILE=$(bashio::config 'pluggie_config.keyfile')
+PLUGGIE_CERTFILE=$(bashio::config 'pluggie_config.certfile')
+PLUGGIE_HTTP_PORT=$(bashio::config 'pluggie_config.http_port')
+PLUGGIE_HTTPS_PORT=$(bashio::config 'pluggie_config.https_port')
+PLUGGIE_DNS=$(bashio::config 'pluggie_config.dns')
+PLUGGIE_ENDPOINT1_IP=$(bashio::config 'pluggie_config.endpoint1_ip')
+PLUGGIE_ENDPOINT1_IP_INT=$(bashio::config 'pluggie_config.endpoint1_ip_int')
+
+if [[ -z "${PLUGGIE_INTERFACE1}" ]]; then
+    bashio::log.fatal "Error in reading pluggie_config.interface1 from pluggie.json! Exiting."
+    exit 1
+fi
+
+# Check if basic auth is properly configured
+if bashio::config.has_value "basic_auth_username" || bashio::config.has_value "basic_auth_password"; then
+    # Check if both values are provided
+    if ! bashio::config.has_value "basic_auth_username" || ! bashio::config.has_value "basic_auth_password"; then
+        bashio::log.warning "Both basic_auth_username and basic_auth_password must be configured for Basic Auth. Disabling Basic Auth for now."
+        exit 1
+    fi
+fi
+
+# Check created wireguard network interface
+PLUGGIE_INTERFACE1_PATH="/sys/class/net/${PLUGGIE_INTERFACE1}"
+
+# Try for 5 seconds
+if ! timeout 5 bash -c "until [ -d ${PLUGGIE_INTERFACE1_PATH} ]; do sleep 1; done"; then
+    bashio::log.fatal "Network interface ${PLUGGIE_INTERFACE1} does not exist! Exiting."
+    exit 1
+else
+    bashio::log.debug "Network interface ${PLUGGIE_INTERFACE1} created."
+fi
+
+NGINXCONF=/etc/nginx/http.d/default.conf
+
+if [[ -n "${SUPERVISOR_TOKEN:-}" ]]; then
+    PLUGGIE_DIR=/ssl/pluggie
+else
+    PLUGGIE_DIR=/data
+fi
+
+CERT_DIR=${PLUGGIE_DIR}/letsencrypt
+WORK_DIR=${PLUGGIE_DIR}/workdir
+PROVIDER_ARGUMENTS=()
+ACME_CUSTOM_SERVER_ARGUMENTS=()
+KEY_ARGUMENTS=()
+
+ACME_SERVER=$(bashio::config 'acme_server')
+ACME_ROOT_CA=$(bashio::config 'acme_root_ca_cert')
+
+declare -A ENDPOINT_ARR
+declare -a HNAMES_ARR
+declare -i ERR=0
+
+# Check DNS records validity first
+bashio::log.debug "Checking Pluggie Endpoint DNS records."
+# fill ENDPOINT_ARR with all ENDPOINT IP addresses
+# IPv4
+IPCOUNT=0
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} A @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="A"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+# IPv6
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} AAAA @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="AAAA"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+
+# CNAME
+for i in `dig +short ${PLUGGIE_ENDPOINT1_SHORT} CNAME @${PLUGGIE_DNS} |grep -v "\.$"`
+do
+  IPCOUNT=$((IPCOUNT+1))
+  ENDPOINT_ARR[$IPCOUNT,1]="CNAME"
+  ENDPOINT_ARR[$IPCOUNT,2]="$i"
+done
+
+
+HNAMES=${PLUGGIE_HOSTNAME}
+
+# fill HNAMES_ARR with all HA hostnames defined in HNAMES
+readarray -t HNAMES_ARR < <(echo ${HNAMES})
+
+# iter over HNAMES_ARR
+for HNAME in ${HNAMES_ARR[@]}
+do
+  # iter over ENDPOINT_ARR
+  for ((i=1;i<=${IPCOUNT};i++))
+  do
+    # fill HNAMEIP_ARR with all resolved IP addresses of HA hostnames
+    readarray -t HNAMEIP_ARR < <(dig +short ${HNAME} ${ENDPOINT_ARR[$i,1]} @${PLUGGIE_DNS}|grep -v "\.$")
+
+    # check if endpoint IP address is in HA hostnames array and add return code (0/1)
+    # to endpoint array to signal which DNS record is OK or NOT OK
+    if printf '%s\0' "${HNAMEIP_ARR[@]}" | grep -qw "${ENDPOINT_ARR[$i,2]}"
+    then
+      ENDPOINT_ARR[$i,3]="0"
+    else
+      ENDPOINT_ARR[$i,3]="1"
+    fi
+  done
+
+  # check missing DNS records
+  for ((i=1;i<=${IPCOUNT};i++))
+  do
+    if [ "${ENDPOINT_ARR[$i,3]}" == "1" ];
+    then
+      bashio::log.error "${HNAME} DNS record type ${ENDPOINT_ARR[$i,1]} is not valid. Missing ${ENDPOINT_ARR[$i,2]}"
+      ERR=1
+    fi
+  done
+done
+
+# final results
+if [ "${ERR}" == "1" ];
+then
+  bashio::log.error "NOT all DNS records for ${HNAMES} are valid. Please check DNS configuration."
+  bashio::log.error "Hostname(s) ${HNAMES} must point to Pluggie servers."
+  bashio::log.error "Please create 'CNAME' DNS record pointing to '${PLUGGIE_ENDPOINT1_SHORT}'"
+  # 'sleep 60' instead of 'exit 1' to keep running for case the DNS records will become valid again
+  bashio::log.info "Waiting for DNS propagation. Sleeping for 60 seconds to run loop again"
+  sleep 60
+  exec $0
+else
+  bashio::log.debug "All DNS records for ${HNAMES} valid."
+fi
+
+
+# Gather all domains into a plaintext file
+DOMAIN_ARR=()
+for line in ${PLUGGIE_HOSTNAME}; do
+    DOMAIN_ARR+=(-d "$line")
+done
+echo "$PLUGGIE_HOSTNAME" > ${PLUGGIE_DIR}/domains.gen
+
+
+# back to certbot stuff
+if bashio::config.has_value 'acme_server' ; then
+    ACME_CUSTOM_SERVER_ARGUMENTS+=("--server" "${ACME_SERVER}")
+
+    if bashio::config.has_value 'acme_root_ca_cert'; then
+      echo "${ACME_ROOT_CA}" > /tmp/root-ca-cert.crt
+      # Certbot will automatically open the filepath contained in REQUESTS_CA_BUNDLE for extra CA cert
+      export REQUESTS_CA_BUNDLE=/tmp/root-ca-cert.crt
+    fi
+fi
+
+# Key detection or manual ECDSA/RSA selection
+if bashio::config.exists 'key_type'; then
+    # Use key type set in configuration
+    KEY_TYPE=$(bashio::config 'key_type')
+    KEY_ARGUMENTS+=("--key-type" "${KEY_TYPE}")
+    if [ "${KEY_TYPE}" == "ecdsa" ]; then
+        if bashio::config.exists 'elliptic_curve'; then
+            ELLIPTIC_CURVE=$(bashio::config 'elliptic_curve')
+            KEY_ARGUMENTS+=("--elliptic-curve" "${ELLIPTIC_CURVE}")
+        else
+            KEY_ARGUMENTS+=("--elliptic-curve" "secp384r1")
+        fi
+    fi
+else
+    bashio::log.debug "Detecting existing certificate type for ${DOMAIN_ARR[1]}"
+    readarray -t CBCERTS < <(certbot certificates --non-interactive --cert-name "${DOMAIN_ARR[1]}" --config-dir "$CERT_DIR" --work-dir "$WORK_DIR")
+    for output in "${CBCERTS[@]}"; do
+        if [[ $output =~ "No certificates found." ]]; then
+            bashio::log.debug "No certificate found - using 'ecdsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "ecdsa")
+            break
+        fi
+        if [[ $output =~ "Key Type: RSA" ]]; then
+            bashio::log.debug "Existing certificate using 'rsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "rsa")
+            break
+        fi
+        if [[ $output =~ "Key Type: ECDSA" ]]; then
+            bashio::log.debug "Existing certificate using 'ecdsa' key type."
+            KEY_ARGUMENTS+=("--key-type" "ecdsa")
+            break
+        fi
+    done
+fi
+
+# Generate a new certificate if necessary or expand a previous certificate if domains has changed
+if [[ "${__BASHIO_LOG_LEVEL}" -eq "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
+    QUIET_OPT=""
+else
+    QUIET_OPT="--quiet"
+fi
+certbot certonly ${QUIET_OPT} --non-interactive --keep-until-expiring --expand \
+    --email "${PLUGGIE_EMAIL}" --agree-tos \
+    "${KEY_ARGUMENTS[@]}" \
+    --cert-name "${DOMAIN_ARR[1]}" "${DOMAIN_ARR[@]}" \
+    --config-dir "$CERT_DIR" --work-dir "$WORK_DIR" \
+    --preferred-challenges "http" "${ACME_CUSTOM_SERVER_ARGUMENTS[@]}" --standalone \
+    --preferred-chain "ISRG Root X1"
+
+# Get cert directory
+# shellcheck disable=SC2012
+CERT_DIR_LATEST="$(ls -td $CERT_DIR/live/*/ |grep "${DOMAIN_ARR[1]}" | head -1)"
+
+# Update NGINX configuration
+/usr/local/bin/update_nginx_config.sh
+
+# Check nginx running
+if pgrep nginx &>/dev/null; then
+    # Reload nginx
+    bashio::log.debug "NGINX is running, performing configuration reload"
+    nginx -s reload
+else
+    # Start nginx
+    bashio::log.debug "Starting NGINX with new configuration"
+    nginx -c /etc/nginx/nginx.conf
+fi
+
+bashio::log.info "Pluggie started."

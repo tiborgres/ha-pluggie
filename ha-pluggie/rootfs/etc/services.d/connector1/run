@@ -1,0 +1,60 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Add-on: Pluggie
+# Runs Pluggie Connector
+# ==============================================================================
+
+log_level=$(bashio::config 'log_level' 'info')
+bashio::log.level "${log_level}"
+
+s6-svc -O /var/run/s6/legacy-services/connector1
+
+access_key=$(bashio::config 'configuration.access_key')
+if [ "${access_key}" = "XXXXX" ] || [ -z "${access_key}" ] || { [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "invalid_key" ]; }; then
+    bashio::log.fatal "WireGuard will not start."
+    echo "invalid_key" > "/etc/pluggie.state"
+    sleep infinity
+    exit 0
+fi
+
+# Read environment variables from /data/pluggie.json
+PLUGGIE_INTERFACE1=$(bashio::config 'pluggie_config.interface1')
+PLUGGIE_APISERVER=$(bashio::config 'pluggie_config.apiserver')
+PLUGGIE_DNS=$(bashio::config 'pluggie_config.dns')
+PLUGGIE_USERAGENT=$(bashio::config 'user_agent')
+
+bashio::log.debug "Waiting for Network stack.."
+
+# Wait for network stack to be ready
+timeout=5
+counter=0
+while ! ip link show lo >/dev/null 2>&1; do
+    sleep 1
+    counter=$((counter + 1))
+    if [ $counter -ge $timeout ]; then
+        bashio::log.error "Network stack not ready after ${timeout} seconds"
+        exit 1
+    fi
+done
+
+bashio::log.debug "Network stack is ready, starting Pluggie Connector.."
+
+export WG_I_PREFER_BUGGY_USERSPACE_TO_POLISHED_KMOD=1
+
+# Start Wireguard
+if [[ "${log_level}" == "debug" ]]; then
+    # If debug level, show all output
+    bashio::log.debug "Starting WireGuard interface ${PLUGGIE_INTERFACE1}..."
+    wg-quick up "${PLUGGIE_INTERFACE1}" 2>&1 | while IFS= read -r line; do
+        if [[ $line == \[#\]* ]]; then
+            # Extract the command part after [#] and trim whitespace
+            command="${line#*\] }"
+            bashio::log.debug "WireGuard command: ${command}"
+        else
+            bashio::log.debug "WireGuard: ${line}"
+        fi
+    done
+else
+    # Otherwise suppress WireGuard output
+    wg-quick up "${PLUGGIE_INTERFACE1}" > /dev/null 2>&1
+fi

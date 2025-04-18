@@ -1,3 +1,11 @@
+## v0.3.0.2
+
+- fixes:
+  - replace custom regex by more standardised way
+  - admin_api URL --> /pluggie/api
+  - minor permissions fix for default pluggie.json when created
+
+
 ## v0.3.0.1
 
 bumped versions:

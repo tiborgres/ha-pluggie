@@ -66,6 +66,7 @@ if ! bashio::fs.file_exists "${ADDON_OPTIONS}"; then
   }
 }
 EOF
+chmod 600 "${ADDON_OPTIONS}"
 
 else
     current_user_agent=$(jq -r '.user_agent // ""' "${ADDON_OPTIONS}")
@@ -167,7 +168,7 @@ server {
     access_log off;
     error_log /dev/null;
 
-    location /api/ {
+    location /pluggie/api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

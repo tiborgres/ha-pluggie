@@ -24,34 +24,30 @@ def validate_url(url):
     Returns:
         tuple: (is_valid, error_message)
     """
-    import re
-    import urllib.parse
 
     if not url or url.strip() == "":
         return True, None  # Empty URL is allowed
 
     url = url.strip()
 
-    # Basic format check
-    url_regex = re.compile(
-        r'^(https?:\/\/)([\w\-]+(\.[\w\-]+)+)(:\d+)?(\/[\w\.\-/?%&=]*)?$'
-    )
-
-    if not url_regex.match(url):
-        return False, "Invalid URL format. Please enter a valid URL in the format http(s)://hostname(:port)(/path)"
-
-    # Additional validation with urllib.parse
+    # Use urllib.parse for validation
     try:
         result = urllib.parse.urlparse(url)
-        if not all([result.scheme, result.netloc]):
-            return False, "URL must contain both scheme (http/https) and hostname"
 
+        # Check scheme
         if result.scheme not in ["http", "https"]:
             return False, "URL must start with http:// or https://"
 
-        # Check for multiple protocol specifications (e.g., http://http://)
-        protocol_count = len(re.findall(r'https?://', url))
-        if protocol_count > 1:
+        # Check netloc (host)
+        if not result.netloc:
+            return False, "URL must contain a valid hostname"
+
+        # Check for invalid port format (colon with no digits after)
+        if ':' in result.netloc and not result.netloc.split(':')[1].isdigit():
+            return False, "Invalid URL format: hostname followed by colon must include a port number"
+
+        # Check for double protocol
+        if '//' in result.netloc or '://' in result.path:
             return False, "URL contains multiple protocol prefixes (http:// or https://)"
 
         return True, None

@@ -1,3 +1,9 @@
+## v0.3.0.3
+
+- fixes:
+  - missing logo :)
+
+
 ## v0.3.0.2
 
 - fixes:

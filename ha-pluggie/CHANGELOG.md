@@ -1,3 +1,12 @@
+## v0.3.0.4
+
+- bumped versions:
+  - alpinelinux 3.21 --> 3.22
+  - cryptography 44.0.2 --> 45.0.4
+  - certbot 4.0.0 --> 4.1.1
+- no fixes needed :)
+
+
 ## v0.3.0.3
 
 - fixes:

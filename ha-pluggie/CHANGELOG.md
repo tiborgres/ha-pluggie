@@ -1,3 +1,10 @@
+## v0.3.2
+
+- bump versions:
+  - cryptography 45.0.4 --> 45.0.7
+  - certbot 4.1.1 --> 5.0.0
+
+
 ## v0.3.1
 
 - v0.3.1

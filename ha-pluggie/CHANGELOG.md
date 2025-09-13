@@ -1,3 +1,9 @@
+## v0.3.3
+
+- feature:
+  - add consumed traffic info into Pluggie sidebar page so there is no need to go check it via https://my.pluggie.net interface
+
+
 ## v0.3.2
 
 - bump versions:

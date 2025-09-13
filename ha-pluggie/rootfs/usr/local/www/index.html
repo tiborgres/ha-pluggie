@@ -49,6 +49,36 @@
                 height: 1.2em;
             }
         }
+        .traffic-wrapper {
+            display: inline-block;
+            width: auto;
+        }
+        .traffic-progress-container {
+            position: relative;
+            margin-top: 3px;
+            height: 2px;
+            background-color: rgba(0, 0, 0, 0.05);
+            width: 100%;
+            border-radius: 0;
+            overflow: hidden;
+        }
+        .traffic-progress-bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 1%;
+            max-width: 100%;
+        }
+        .traffic-progress-bar.bg-success {
+            background-color: #2fb344;
+        }
+        .traffic-progress-bar.bg-warning {
+            background-color: #f7c32e;
+        }
+        .traffic-progress-bar.bg-danger {
+            background-color: #d63939;
+        }
     </style>
 </head>
 
@@ -85,7 +115,32 @@
                                             </div>
                                             <small class="form-hint">Hostname can be changed in your <a href="https://my.pluggie.net" target="_blank">my.pluggie.net</a> account</small>
                                         </div>
-
+                                        <!-- Traffic -->
+                                        <div id="traffic-container" class="mb-3" style="display: none;">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Traffic</label>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label id="traffic-reset-label" class="form-label">Next reset</label>
+                                                </div>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <div class="traffic-wrapper">
+                                                        <div id="traffic-display">Loading...</div>
+                                                        <div id="traffic-progress-container" class="traffic-progress-container" style="display: none;">
+                                                            <div id="traffic-progress-bar" class="traffic-progress-bar bg-success" style="width: 0%"></div>
+                                                        </div>
+                                                    </div>
+                                                    <small id="traffic-hint" class="form-hint">Current traffic usage for this period</small>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div id="traffic-reset-display">Loading...</div>
+                                                    <small id="traffic-reset-hint" class="form-hint text-muted" style="font-size: 0.8rem;">When traffic counter goes to zero</small>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <!-- Access Key -->
                                         <div class="mb-3">
                                             <label class="form-label">Access Key</label>
@@ -655,6 +710,162 @@
             }
         }
 
+        async function loadTrafficData() {
+            try {
+                const response = await fetch('./pluggie/api/traffic');
+                const data = await response.json();
+
+                const trafficContainer = document.getElementById('traffic-container');
+                const trafficDisplay = document.getElementById('traffic-display');
+                const trafficResetDisplay = document.getElementById('traffic-reset-display');
+                const trafficProgressContainer = document.getElementById('traffic-progress-container');
+                const trafficProgressBar = document.getElementById('traffic-progress-bar');
+                const trafficHint = document.getElementById('traffic-hint');
+
+                if (data.status === 'success') {
+                    trafficContainer.style.display = 'block';
+
+                    // Traffic usage display
+                    if (data.traffic_limit_mb) {
+                        const usedMB = data.traffic_used_mb;
+                        const limitMB = data.traffic_limit_mb;
+                        const percentage = Math.min((usedMB / limitMB) * 100, 100);
+
+                        trafficDisplay.textContent = `${usedMB} MB / ${limitMB} MB`;
+                        trafficProgressContainer.style.display = 'block';
+                        trafficProgressBar.style.width = `${percentage}%`;
+
+                        if (percentage < 75) {
+                            trafficProgressBar.className = 'traffic-progress-bar bg-success';
+                        } else if (percentage < 90) {
+                            trafficProgressBar.className = 'traffic-progress-bar bg-warning';
+                        } else {
+                            trafficProgressBar.className = 'traffic-progress-bar bg-danger';
+                        }
+
+                        if (data.is_rate_limited) {
+                            trafficHint.innerHTML = `Current traffic usage - <span class="text-danger">Rate limited until period reset</span>`;
+                        } else {
+                            trafficHint.textContent = 'Current traffic usage for this period';
+                        }
+                    } else {
+                        trafficDisplay.textContent = `${data.traffic_used_mb} MB`;
+                        trafficProgressContainer.style.display = 'none';
+                        trafficHint.textContent = 'Current traffic usage';
+                    }
+
+                    // Traffic reset display
+                    const trafficResetLabel = document.getElementById('traffic-reset-label');
+                    const trafficResetHint = document.getElementById('traffic-reset-hint');
+
+                    if (data.is_free_user) {
+                        // For free users use next_reset
+                        if (trafficResetLabel) {
+                            trafficResetLabel.textContent = 'Next reset';
+                        }
+
+                        if (data.next_reset) {
+                            try {
+                                const resetDate = new Date(data.next_reset);
+                                if (!isNaN(resetDate.getTime())) {
+                                    trafficResetDisplay.textContent = formatLocalDateTime(data.next_reset);
+                                } else {
+                                    trafficResetDisplay.textContent = 'Rolling 30-day period';
+                                }
+                            } catch (error) {
+                                trafficResetDisplay.textContent = 'Rolling 30-day period';
+                            }
+                        } else {
+                            trafficResetDisplay.textContent = 'Rolling 30-day period';
+                        }
+
+                        if (trafficResetHint) {
+                            trafficResetHint.textContent = 'When traffic counter goes to zero';
+                        }
+                    } else {
+                        // For paid users use end_period
+                        if (trafficResetLabel) {
+                            trafficResetLabel.textContent = 'End of period';
+                        }
+
+                        if (data.end_period) {
+                            try {
+                                const endDate = new Date(data.end_period);
+                                if (!isNaN(endDate.getTime())) {
+                                    trafficResetDisplay.textContent = formatLocalDateTime(data.end_period);
+                                } else {
+                                    trafficResetDisplay.textContent = 'N/A';
+                                }
+                            } catch (error) {
+                                trafficResetDisplay.textContent = 'N/A';
+                            }
+                        } else {
+                            trafficResetDisplay.textContent = 'N/A';
+                        }
+
+                        if (trafficResetHint) {
+                            trafficResetHint.textContent = 'When subscription expires';
+                        }
+                    }
+
+                } else {
+                    trafficContainer.style.display = 'block';
+                    trafficDisplay.textContent = data.message || 'N/A at the moment';
+                    trafficResetDisplay.textContent = 'N/A';
+                    trafficProgressContainer.style.display = 'none';
+                    trafficHint.textContent = 'Traffic information temporarily unavailable';
+
+                    // Reset labels in case of error
+                    const trafficResetLabel = document.getElementById('traffic-reset-label');
+                    const trafficResetHint = document.getElementById('traffic-reset-hint');
+                    if (trafficResetLabel) {
+                        trafficResetLabel.textContent = 'Next reset';
+                    }
+                    if (trafficResetHint) {
+                        trafficResetHint.textContent = 'Information unavailable';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading traffic data:', error);
+                const trafficContainer = document.getElementById('traffic-container');
+                const trafficDisplay = document.getElementById('traffic-display');
+                const trafficResetDisplay = document.getElementById('traffic-reset-display');
+                const trafficHint = document.getElementById('traffic-hint');
+
+                trafficContainer.style.display = 'block';
+                trafficDisplay.textContent = 'N/A at the moment';
+                trafficResetDisplay.textContent = 'N/A';
+                document.getElementById('traffic-progress-container').style.display = 'none';
+                trafficHint.textContent = 'Unable to load traffic information';
+
+                // Reset labels in case of error
+                const trafficResetLabel = document.getElementById('traffic-reset-label');
+                const trafficResetHint = document.getElementById('traffic-reset-hint');
+                if (trafficResetLabel) {
+                    trafficResetLabel.textContent = 'Next reset';
+                }
+                if (trafficResetHint) {
+                    trafficResetHint.textContent = 'Unable to load information';
+                }
+            }
+        }
+
+        function formatLocalDateTime(utcDateStr) {
+            if (!utcDateStr || utcDateStr === 'None') return 'N/A';
+            try {
+                const dateStr = utcDateStr.endsWith('Z') ? utcDateStr : utcDateStr + 'Z';
+                const date = new Date(dateStr);
+
+                if (isNaN(date.getTime())) {
+                    return utcDateStr;
+                }
+
+                return date.toISOString().replace('T', ' ').slice(0, 19);
+            } catch (error) {
+                return utcDateStr;
+            }
+        }
+
         function showFieldWarning(inputElement, errorElement, message) {
             inputElement.classList.remove('is-invalid', 'is-valid');
 
@@ -736,6 +947,11 @@
 
                 if (data.elliptic_curve) {
                     document.getElementById('elliptic_curve').value = data.elliptic_curve;
+                }
+
+                // Load Traffic Data only if access_key is valid
+                if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
+                    await loadTrafficData();
                 }
 
                 // Reset form changed flag after loading
@@ -1043,6 +1259,20 @@
                 proxiedHostInput.dispatchEvent(event);
             }
         };
+
+        // Periodic traffic data information refresh every minute
+        setInterval(async () => {
+            try {
+                const response = await fetch('./pluggie/api/options');
+                const data = await response.json();
+
+                if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
+                    await loadTrafficData();
+                }
+            } catch (error) {
+                console.debug('Periodic traffic update failed:', error);
+            }
+        }, 60000);
     </script>
 </body>
 </html>

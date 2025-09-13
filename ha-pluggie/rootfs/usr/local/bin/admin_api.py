@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import signal
+import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
 from logger import setup_logging, reload_options_log_level
@@ -171,7 +172,6 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                                 connectivity_issue = False
                             else:
                                 try:
-                                    import requests
                                     api_server = options.get('pluggie_config', {}).get('apiserver', 'api.pluggie.net')
                                     test_url = f"https://{api_server}/health"
                                     response = requests.head(test_url, timeout=3)
@@ -214,6 +214,57 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                     return
                 except Exception as e:
                     logging.error(f"Error in health check: {e}")
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode())
+                    except BrokenPipeError:
+                        logging.warning("Broken pipe error while sending error response")
+                        return
+
+            elif self.path == '/pluggie/api/traffic':
+                try:
+                    with open(OPTIONS_FILE, 'r') as f:
+                        options = json.load(f)
+
+                    access_key = options.get('configuration', {}).get('access_key')
+                    if not access_key or access_key == 'XXXXX':
+                        self._set_headers()
+                        self.wfile.write(json.dumps({
+                            "status": "error",
+                            "message": "No valid access key configured"
+                        }).encode())
+                        return
+
+                    api_server = options.get('pluggie_config', {}).get('apiserver', 'api.pluggie.net')
+                    api_url = f"https://{api_server}/api/traffic"
+                    headers = {
+                        'Authorization': f'Bearer {access_key}',
+                        'User-Agent': options.get('user_agent', 'Pluggie-HA-Addon')
+                    }
+
+                    response = requests.get(api_url, headers=headers, timeout=10)
+
+                    if response.status_code == 200:
+                        traffic_data = response.json()
+                        self._set_headers()
+                        self.wfile.write(json.dumps(traffic_data).encode())
+                    else:
+                        self._set_headers()
+                        self.wfile.write(json.dumps({
+                            "status": "error",
+                            "message": "Traffic data unavailable"
+                        }).encode())
+
+                except requests.exceptions.RequestException as e:
+                    logging.debug(f"API connectivity error: {e}")
+                    self._set_headers()
+                    self.wfile.write(json.dumps({
+                        "status": "error",
+                        "message": "N/A at the moment"
+                    }).encode())
+                except Exception as e:
+                    logging.error(f"Error retrieving traffic data: {e}")
                     try:
                         self.send_response(500)
                         self.end_headers()

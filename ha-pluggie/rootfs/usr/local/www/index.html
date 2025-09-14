@@ -79,6 +79,28 @@
         .traffic-progress-bar.bg-danger {
             background-color: #d63939;
         }
+        /* Traffic responsive layout */
+        @media (min-width: 768px) {
+            .simple-traffic-layout {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr !important;
+                gap: 2rem !important;
+            }
+        }
+        @media (max-width: 767.98px) {
+            .simple-traffic-layout {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .traffic-block, .reset-block {
+                display: flex;
+                flex-direction: column;
+            }
+            .traffic-block {
+                margin-bottom: 0.5rem;
+            }
+        }
     </style>
 </head>
 
@@ -116,29 +138,21 @@
                                             <small class="form-hint">Hostname can be changed in your <a href="https://my.pluggie.net" target="_blank">my.pluggie.net</a> account</small>
                                         </div>
                                         <!-- Traffic -->
-                                        <div id="traffic-container" class="mb-3" style="display: none;">
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label">Traffic</label>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label id="traffic-reset-label" class="form-label">Next reset</label>
-                                                </div>
-                                            </div>
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <div class="traffic-wrapper">
-                                                        <div id="traffic-display">Loading...</div>
-                                                        <div id="traffic-progress-container" class="traffic-progress-container" style="display: none;">
-                                                            <div id="traffic-progress-bar" class="traffic-progress-bar bg-success" style="width: 0%"></div>
-                                                        </div>
+                                        <div id="traffic-container" class="mb-3 simple-traffic-layout" style="display: none;">
+                                            <div class="traffic-block">
+                                                <label class="form-label">Traffic</label>
+                                                <div class="traffic-wrapper">
+                                                    <div id="traffic-display">Loading...</div>
+                                                    <div id="traffic-progress-container" class="traffic-progress-container" style="display: none;">
+                                                        <div id="traffic-progress-bar" class="traffic-progress-bar bg-success" style="width: 0%"></div>
                                                     </div>
-                                                    <small id="traffic-hint" class="form-hint">Current traffic usage for this period</small>
                                                 </div>
-                                                <div class="col-md-6">
-                                                    <div id="traffic-reset-display">Loading...</div>
-                                                    <small id="traffic-reset-hint" class="form-hint text-muted" style="font-size: 0.8rem;">When traffic counter goes to zero</small>
-                                                </div>
+                                                <small id="traffic-hint" class="form-hint">Current traffic usage for this period</small>
+                                            </div>
+                                            <div class="reset-block">
+                                                <label id="traffic-reset-label" class="form-label">Next reset</label>
+                                                <div id="traffic-reset-display">Loading...</div>
+                                                <small id="traffic-reset-hint" class="form-hint text-muted" style="font-size: 0.8rem;">When traffic counter goes to zero</small>
                                             </div>
                                         </div>
                                         <!-- Access Key -->

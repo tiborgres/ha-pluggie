@@ -1,3 +1,9 @@
+## v0.3.4
+
+- fix:
+  - traffic info view on mobiles in sidebar
+
+
 ## v0.3.3
 
 - feature:

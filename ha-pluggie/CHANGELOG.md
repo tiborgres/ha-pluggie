@@ -1,3 +1,9 @@
+## v0.3.5
+
+- bump versions:
+  - cryptography 45.0.7 --> 46.0.1
+
+
 ## v0.3.4
 
 - fix:

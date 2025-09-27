@@ -1,3 +1,9 @@
+## v0.3.6
+
+- bump versions:
+  - wireguard-tools 0.5.2 --> 0.5.3
+
+
 ## v0.3.5
 
 - bump versions:

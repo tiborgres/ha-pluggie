@@ -772,8 +772,11 @@
                     const trafficResetLabel = document.getElementById('traffic-reset-label');
                     const trafficResetHint = document.getElementById('traffic-reset-hint');
 
-                    if (data.is_free_user) {
-                        // For free users use next_reset
+                    // For signup and VIP users use next_reset, for paid users use end_period
+                    const shouldShowNextReset = data.is_free_user || data.is_vip_user;
+
+                    if (shouldShowNextReset) {
+                        // For signup and VIP users use next_reset
                         if (trafficResetLabel) {
                             trafficResetLabel.textContent = 'Next reset';
                         }

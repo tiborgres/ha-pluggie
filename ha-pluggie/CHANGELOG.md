@@ -1,3 +1,8 @@
+## v0.3.8
+
+- fix for viewing consumed traffic information in Pluggie sidebar index.html
+
+
 ## v0.3.7
 
 - bump versions:

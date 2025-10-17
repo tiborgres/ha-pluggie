@@ -101,6 +101,250 @@
                 margin-bottom: 0.5rem;
             }
         }
+        /* Dark theme variables and styles */
+        .theme-dark {
+            --bg-surface-dark: #1a2234;
+            --bg-surface-dark-alt: #141e2d;
+            --card-bg-dark: rgba(30, 41, 59, 0.95);
+            --text-light: #e9ecef;
+            --text-muted-dark: #9aa5b9;
+            --highlight-blue: #60a5fa;
+            --success-color: #25c26f;
+            --warning-color: #f59f00;
+            --danger-color: #d63939;
+            --border-color: rgba(255, 255, 255, 0.1);
+            color-scheme: dark;
+        }
+
+        .theme-dark body {
+            background-color: var(--bg-surface-dark);
+            color: var(--text-light);
+        }
+
+        .theme-dark .page-wrapper {
+            background-color: var(--bg-surface-dark);
+        }
+
+        .theme-dark .navbar {
+            background-color: var(--bg-surface-dark-alt) !important;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .theme-dark .card {
+            background-color: var(--card-bg-dark);
+            border-color: var(--border-color);
+            color: var(--text-light);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-dark .card-header {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-bottom-color: var(--border-color);
+            color: var(--text-light);
+        }
+
+        .theme-dark .form-label {
+            color: var(--text-light);
+        }
+
+        .theme-dark .form-control,
+        .theme-dark .form-select,
+        .theme-dark textarea.form-control {
+            background-color: var(--bg-surface-dark);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--text-light);
+        }
+
+        .theme-dark .form-control::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .theme-dark .form-control:focus,
+        .theme-dark .form-select:focus,
+        .theme-dark textarea.form-control:focus {
+            background-color: var(--bg-surface-dark);
+            border-color: var(--highlight-blue);
+            color: var(--text-light);
+            box-shadow: 0 0 0 0.2rem rgba(96, 165, 250, 0.25);
+        }
+
+        .theme-dark .form-control:disabled,
+        .theme-dark .form-select:disabled {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted-dark);
+            opacity: 0.6;
+        }
+
+        .theme-dark .form-control.bg-light {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .theme-dark .form-hint,
+        .theme-dark .form-text {
+            color: var(--text-muted-dark);
+        }
+
+        .theme-dark .text-muted {
+            color: var(--text-muted-dark) !important;
+        }
+
+        .theme-dark h1, .theme-dark h2, .theme-dark h3,
+        .theme-dark h4, .theme-dark h5, .theme-dark h6 {
+            color: var(--text-light);
+        }
+
+        .theme-dark .btn-primary {
+            background-color: var(--highlight-blue);
+            border-color: var(--highlight-blue);
+            color: #0f1623;
+        }
+
+        .theme-dark .btn-primary:hover:not(:disabled) {
+            background-color: #90c2ff;
+            border-color: #90c2ff;
+            color: #0f1623;
+        }
+
+        .theme-dark .btn-primary:disabled {
+            background-color: rgba(96, 165, 250, 0.5);
+            border-color: rgba(96, 165, 250, 0.5);
+        }
+
+        .theme-dark .btn-outline-secondary {
+            color: var(--text-light);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .theme-dark .btn-outline-secondary:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: var(--text-light);
+        }
+
+        .theme-dark .btn-icon {
+            color: var(--text-light);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .theme-dark .btn-icon:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .theme-dark .btn-ghost-secondary {
+            color: var(--text-light);
+        }
+
+        .theme-dark .btn-ghost-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .theme-dark .alert {
+            border-width: 1px;
+        }
+
+        .theme-dark .alert-warning {
+            background-color: rgba(245, 159, 0, 0.1);
+            border-color: var(--warning-color);
+            color: var(--text-light);
+        }
+
+        .theme-dark .alert-warning .ti {
+            color: var(--warning-color);
+        }
+
+        .theme-dark .alert-danger {
+            background-color: rgba(214, 57, 57, 0.1);
+            border-color: var(--danger-color);
+            color: var(--text-light);
+        }
+
+        .theme-dark .alert-success {
+            background-color: rgba(37, 194, 111, 0.1);
+            border-color: var(--success-color);
+            color: var(--text-light);
+        }
+
+        .theme-dark .alert-info {
+            background-color: rgba(96, 165, 250, 0.1);
+            border-color: var(--highlight-blue);
+            color: var(--text-light);
+        }
+
+        .theme-dark .form-control.is-valid {
+            border-color: var(--success-color);
+            background-image: none;
+        }
+
+        .theme-dark .form-control.is-invalid {
+            border-color: var(--danger-color);
+            background-image: none;
+        }
+
+        .theme-dark .form-control.is-warning {
+            border-color: var(--warning-color) !important;
+        }
+
+        .theme-dark .text-success {
+            color: var(--success-color) !important;
+        }
+
+        .theme-dark .text-warning {
+            color: var(--warning-color) !important;
+        }
+
+        .theme-dark .text-danger {
+            color: var(--danger-color) !important;
+        }
+
+        .theme-dark .invalid-feedback,
+        .theme-dark .form-text.text-danger {
+            color: var(--danger-color) !important;
+        }
+
+        .theme-dark .form-text.text-success {
+            color: var(--success-color) !important;
+        }
+
+        .theme-dark .form-text.text-warning {
+            color: var(--warning-color) !important;
+        }
+
+        .theme-dark .traffic-progress-container {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .theme-dark .traffic-progress-bar.bg-success {
+            background-color: var(--success-color) !important;
+        }
+
+        .theme-dark .traffic-progress-bar.bg-warning {
+            background-color: var(--warning-color) !important;
+        }
+
+        .theme-dark .traffic-progress-bar.bg-danger {
+            background-color: var(--danger-color) !important;
+        }
+
+        .theme-dark .navbar-brand img {
+            filter: brightness(0) invert(1);
+        }
+
+        .theme-dark .progress-bar.bg-success {
+            background-color: var(--success-color) !important;
+        }
+
+        .theme-dark .progress-bar.bg-warning {
+            background-color: var(--warning-color) !important;
+        }
+
+        .theme-dark .progress-bar.bg-danger {
+            background-color: var(--danger-color) !important;
+        }
+
+        .theme-dark .spinner-border {
+            color: var(--highlight-blue);
+        }
     </style>
 </head>
 
@@ -295,6 +539,20 @@
         let isDockerPluggie = true;
         let formChanged = false;
         let isFormValid = false;
+
+        // Automatic Dark Theme Detection
+        (function() {
+            function applySystemTheme() {
+                const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.body.className = isDark ? 'theme-dark' : 'theme-light';
+            }
+
+            // Apply theme immediately
+            applySystemTheme();
+            
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySystemTheme);
+        })();
 
         document.addEventListener('DOMContentLoaded', function() {
             detectAddonType();

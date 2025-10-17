@@ -1,3 +1,10 @@
+## v0.3.9
+
+- Dark Mode! :)
+- bump versions:
+  - cryptography 46.0.2 --> 46.0.3
+
+
 ## v0.3.8
 
 - fix for viewing consumed traffic information in Pluggie sidebar index.html

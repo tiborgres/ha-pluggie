@@ -105,6 +105,13 @@ fi
 
 PLUGGIE_HTTP_PORT=$(bashio::config 'pluggie_config.http_port' '54001')
 
+# Check if brotli module is available
+BROTLI_AVAILABLE=false
+if [ -f "/usr/lib/nginx/modules/ngx_http_brotli_filter_module.so" ]; then
+    BROTLI_AVAILABLE=true
+    bashio::log.debug "Brotli module detected, enabling compression"
+fi
+
 # /etc/nginx/nginx.conf
 cat <<EOF > "/etc/nginx/nginx.conf"
 user nginx;
@@ -122,20 +129,65 @@ http {
     client_max_body_size 1m;
     sendfile on;
     tcp_nopush on;
-    ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
+
+    # SSL settings
+    ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers on;
     ssl_session_cache shared:SSL:2m;
     ssl_session_timeout 1h;
     ssl_session_tickets off;
+
+    # Gzip compression (fallback)
+    gzip on;
     gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 5;
+    gzip_min_length 256;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        application/xml+rss
+        image/svg+xml;
+
+EOF
+
+# Add brotli compression if available
+if [ "${BROTLI_AVAILABLE}" = true ]; then
+    cat <<EOF >> "/etc/nginx/nginx.conf"
+    # Brotli compression (primary)
+    brotli on;
+    brotli_comp_level 5;
+    brotli_min_length 256;
+    brotli_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/json
+        application/xml
+        application/xml+rss
+        image/svg+xml;
+
+EOF
+fi
+
+cat <<EOF >> "/etc/nginx/nginx.conf"
     map \$http_upgrade \$connection_upgrade {
         default upgrade;
         '' close;
     }
+
     log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
             '\$status \$body_bytes_sent "\$http_referer" '
             '"\$http_user_agent" "\$http_x_forwarded_for"';
     access_log off;
+
     include /etc/nginx/http.d/*.conf;
 }
 EOF

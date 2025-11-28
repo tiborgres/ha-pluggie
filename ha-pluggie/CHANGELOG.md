@@ -1,3 +1,9 @@
+## v0.4.0
+
+- replace gzip by brotli (lower traffic consumption)
+- remove TLSv1.1
+
+
 ## v0.3.9.1
 
 - bump versions:

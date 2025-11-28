@@ -34,6 +34,7 @@ RUN set -x \
     && apk add --no-cache \
         wireguard-tools \
         nginx \
+        nginx-mod-http-brotli \
         apache2-utils \
         openresolv \
         openssl \

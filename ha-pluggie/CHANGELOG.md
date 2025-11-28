@@ -1,3 +1,9 @@
+## v0.3.9.1
+
+- bump versions:
+  - fixed from v0.3.9: cryptography 46.0.2 --> 46.0.3
+
+
 ## v0.3.9
 
 - Dark Mode! :)

@@ -1,3 +1,8 @@
+## v0.4.1
+
+- show helpful error pages in cases of incomplete Pluggie setup
+
+
 ## v0.4.0
 
 - replace gzip by brotli (lower traffic consumption)

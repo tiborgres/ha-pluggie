@@ -112,6 +112,15 @@ server {
     access_log off;
     error_log /dev/null;
 
+    # Intercept proxy errors to show helpful error pages
+    proxy_intercept_errors on;
+    error_page 400 /400.html;
+
+    location = /400.html {
+        root /usr/local/www;
+        internal;
+    }
+
     # Basic location block
     location / {
 EOF

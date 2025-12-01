@@ -273,6 +273,95 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                         logging.warning("Broken pipe error while sending error response")
                         return
 
+            elif self.path == '/pluggie/api/proxy-check':
+                try:
+                    with open(OPTIONS_FILE, 'r') as f:
+                        options = json.load(f)
+
+                    proxied_host = options.get('proxied_host', '')
+                    user_agent = options.get('user_agent', '')
+
+                    # Determine platform
+                    is_ha_addon = "HA" in user_agent
+
+                    # If no proxied_host configured, use default for HA addon
+                    if not proxied_host or proxied_host.strip() == '':
+                        if is_ha_addon:
+                            proxied_host = "http://homeassistant.local.hass.io:8123"
+                        else:
+                            # Docker without proxied_host - nothing to check
+                            self._set_headers()
+                            self.wfile.write(json.dumps({
+                                "status": "ok",
+                                "message": "No proxied host configured",
+                                "check_performed": False
+                            }).encode())
+                            return
+
+                    # Perform the check
+                    try:
+                        response = requests.get(
+                            proxied_host,
+                            timeout=5,
+                            allow_redirects=False,
+                            headers={
+                                'X-Forwarded-For': '127.0.0.1',
+                                'X-Forwarded-Proto': 'https'
+                            }
+                        )
+
+                        if response.status_code == 400:
+                            # 400 Bad Request - likely missing trusted_proxies
+                            self._set_headers()
+                            self.wfile.write(json.dumps({
+                                "status": "config_required",
+                                "message": "Proxied host returned 400 Bad Request. Configuration may be required.",
+                                "http_status": 400,
+                                "is_ha_addon": is_ha_addon,
+                                "check_performed": True
+                            }).encode())
+                        else:
+                            # Any other response means the connection works
+                            self._set_headers()
+                            self.wfile.write(json.dumps({
+                                "status": "ok",
+                                "message": "Proxied host is reachable",
+                                "http_status": response.status_code,
+                                "check_performed": True
+                            }).encode())
+
+                    except requests.exceptions.ConnectionError as e:
+                        # Connection refused or host unreachable
+                        logging.debug(f"Proxy check connection error: {e}")
+                        self._set_headers()
+                        self.wfile.write(json.dumps({
+                            "status": "connection_error",
+                            "message": "Cannot connect to proxied host",
+                            "check_performed": True
+                        }).encode())
+
+                    except requests.exceptions.Timeout:
+                        logging.debug("Proxy check timeout")
+                        self._set_headers()
+                        self.wfile.write(json.dumps({
+                            "status": "timeout",
+                            "message": "Connection to proxied host timed out",
+                            "check_performed": True
+                        }).encode())
+
+                except BrokenPipeError:
+                    logging.warning("Broken pipe error when checking proxy")
+                    return
+                except Exception as e:
+                    logging.error(f"Error checking proxy: {e}")
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode())
+                    except BrokenPipeError:
+                        logging.warning("Broken pipe error while sending error response")
+                        return
+
             else:
                 try:
                     self.send_response(404)

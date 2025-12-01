@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Required - Pluggie</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0/dist/css/tabler.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <style>
+        body {
+            background-color: #f5f7fb;
+        }
+        .page-wrapper {
+            padding: 1.5rem 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .error-icon {
+            font-size: 4rem;
+            color: #f59f00;
+        }
+        .code-block {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+            text-align: left;
+            margin: 0;
+            white-space: pre;
+        }
+        .code-block .comment { color: #64748b; }
+        .code-block .key { color: #7dd3fc; }
+        .code-block .value { color: #86efac; }
+        .step-number {
+            width: 28px;
+            height: 28px;
+            background-color: #206bc4;
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.875rem;
+            margin-right: 0.5rem;
+        }
+
+        /* Dark theme variables and styles */
+        .theme-dark {
+            --bg-surface-dark: #1a2234;
+            --bg-surface-dark-alt: #141e2d;
+            --card-bg-dark: rgba(30, 41, 59, 0.95);
+            --text-light: #e9ecef;
+            --text-muted-dark: #9aa5b9;
+            --highlight-blue: #60a5fa;
+            --success-color: #25c26f;
+            --warning-color: #f59f00;
+            --danger-color: #d63939;
+            --border-color: rgba(255, 255, 255, 0.1);
+            color-scheme: dark;
+        }
+
+        .theme-dark body {
+            background-color: var(--bg-surface-dark);
+            color: var(--text-light);
+        }
+
+        .theme-dark .page-wrapper {
+            background-color: var(--bg-surface-dark);
+        }
+
+        .theme-dark .card {
+            background-color: var(--card-bg-dark);
+            border-color: var(--border-color);
+            color: var(--text-light);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-dark .text-muted {
+            color: var(--text-muted-dark) !important;
+        }
+
+        .theme-dark h1, .theme-dark h2, .theme-dark h3,
+        .theme-dark h4, .theme-dark h5, .theme-dark h6 {
+            color: var(--text-light);
+        }
+
+        .theme-dark .code-block {
+            background-color: #0f172a;
+        }
+
+        .theme-dark hr {
+            border-color: var(--border-color);
+        }
+
+        .theme-dark code {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+        }
+    </style>
+</head>
+<body class="theme-light">
+    <div class="page">
+        <div class="page-wrapper">
+            <div class="page-body">
+                <div class="container-xl">
+                    <div class="row justify-content-center">
+                        <div class="col-12 col-md-10 col-lg-8">
+                            <div class="text-center mb-4">
+                                <i class="ti ti-alert-triangle error-icon"></i>
+                                <h1 class="mt-3">Configuration Required</h1>
+                                <p class="text-muted">Home Assistant needs additional configuration to work with Pluggie.</p>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-body">
+                                    <h3 class="mb-3">What happened?</h3>
+                                    <p>Home Assistant rejected the connection because it doesn't recognize Pluggie as a trusted proxy. This is a security feature that prevents unauthorized access.</p>
+
+                                    <hr class="my-4">
+
+                                    <h3 class="mb-3">How to fix it</h3>
+
+                                    <div class="mb-4">
+                                        <p><span class="step-number">1</span>Open your Home Assistant <code>configuration.yaml</code> file</p>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <p><span class="step-number">2</span>Add the following configuration:</p>
+<pre class="code-block"><span class="key">http:</span>
+  <span class="key">use_x_forwarded_for:</span> <span class="value">true</span>
+  <span class="key">trusted_proxies:</span>
+    <span class="value">- 172.30.32.0/23</span>  <span class="comment"># Pluggie addon network</span></pre>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <p><span class="step-number">3</span>Restart Home Assistant</p>
+                                        <p class="text-muted small">Go to <strong>Settings → System → Restart</strong> or use the command line.</p>
+                                    </div>
+
+                                    <div class="mb-0">
+                                        <p><span class="step-number">4</span>Try accessing your Home Assistant again through Pluggie</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Automatic Dark Theme Detection
+        (function() {
+            function applySystemTheme() {
+                const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.body.className = isDark ? 'theme-dark' : 'theme-light';
+            }
+
+            // Apply theme immediately
+            applySystemTheme();
+
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySystemTheme);
+        })();
+    </script>
+</body>
+</html>

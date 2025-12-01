@@ -369,6 +369,21 @@
 
                             <div class="card">
                                 <div class="card-body">
+                                    <!-- Proxy Configuration Warning -->
+                                    <div id="proxy-warning" class="alert alert-warning mb-4" style="display: none;">
+                                        <div class="d-flex">
+                                            <div class="alert-icon">
+                                                <i class="ti ti-alert-triangle"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="alert-title">Configuration Required</h4>
+                                                <p class="mb-2" id="proxy-warning-message">
+                                                    Your proxied host returned an error. Additional configuration may be needed.
+                                                </p>
+                                                <p class="mb-0 small text-muted" id="proxy-warning-hint"></p>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <form id="configForm">
                                         <!-- Hostname -->
                                         <div id="hostname-container" class="mb-3" style="display: none;">
@@ -558,7 +573,39 @@
             detectAddonType();
             loadConfig();
             setupValidation();
+
+            // Check proxy status after a delay to allow services to start
+            setTimeout(checkProxyStatus, 3000);
         });
+
+        async function checkProxyStatus() {
+            try {
+                const response = await fetch('./pluggie/api/proxy-check');
+                const data = await response.json();
+
+                const warningDiv = document.getElementById('proxy-warning');
+                const warningMessage = document.getElementById('proxy-warning-message');
+                const warningHint = document.getElementById('proxy-warning-hint');
+
+                if (data.status === 'config_required') {
+                    if (data.is_ha_addon) {
+                        warningMessage.innerHTML = 'Home Assistant returned <strong>400 Bad Request</strong>. You need to add <code>trusted_proxies</code> configuration.';
+                        warningHint.innerHTML = 'Add the following to your <code>configuration.yaml</code> and restart Home Assistant:<br><code style="white-space: pre;">http:\n  use_x_forwarded_for: true\n  trusted_proxies:\n    - 172.30.32.0/23</code>';
+                    } else {
+                        warningMessage.innerHTML = 'Your proxied host returned <strong>400 Bad Request</strong>. The target server may need to be configured to accept connections from Pluggie.';
+                        warningHint.textContent = 'Check your web server configuration and add the Pluggie server IP to the list of trusted proxies.';
+                    }
+                    warningDiv.style.display = 'block';
+                } else if (data.status === 'connection_error') {
+                    console.log('Proxy check: Connection error (may be normal during startup)');
+                    warningDiv.style.display = 'none';
+                } else {
+                    warningDiv.style.display = 'none';
+                }
+            } catch (error) {
+                console.debug('Proxy check failed:', error);
+            }
+        }
 
         function setupValidation() {
             const form = document.getElementById('configForm');
@@ -1548,6 +1595,9 @@
                 console.debug('Periodic traffic update failed:', error);
             }
         }, 60000);
+
+        // Periodic proxy status check every minute
+        setInterval(checkProxyStatus, 60000);
     </script>
 </body>
 </html>

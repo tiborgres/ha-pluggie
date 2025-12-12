@@ -1,3 +1,10 @@
+## v0.4.2
+
+- fix day/night view of Pluggie sidebar
+- bump versions:
+  - certbot 5.1.0 --> 5.2.2
+
+
 ## v0.4.1
 
 - show helpful error pages in cases of incomplete Pluggie setup

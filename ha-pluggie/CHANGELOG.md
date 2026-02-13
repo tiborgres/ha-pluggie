@@ -6,7 +6,7 @@
 - fix warning class not being removed on validation success (Pluggie sidebar)
 
 - DEPRECATION NOTICE:
-  - platforms armhf, armv7 and i386 are not supported in HomeAssistant anymore and will be removed in next release (0.5.0) of HomeAssistant Edition of Pluggie. This does not affect this Docker Edition you are running.
+  - platforms armhf, armv7 and i386 are not supported in HomeAssistant anymore and will be removed in next release (0.5.0). This does not affect the Docker Edition of Pluggie.
 
 
 ## v0.4.2

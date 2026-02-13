@@ -786,7 +786,7 @@
 
         function showFieldSuccess(inputElement, errorElement, message) {
             inputElement.classList.add('is-valid');
-            inputElement.classList.remove('is-invalid');
+            inputElement.classList.remove('is-invalid', 'is-warning');
 
             if (errorElement.tagName === 'SMALL') {
                 errorElement.textContent = message || '';
@@ -798,7 +798,7 @@
         }
 
         function resetField(inputElement, errorElement) {
-            inputElement.classList.remove('is-valid', 'is-invalid');
+            inputElement.classList.remove('is-valid', 'is-invalid', 'is-warning');
 
             if (errorElement.tagName === 'SMALL') {
                 errorElement.textContent = '';

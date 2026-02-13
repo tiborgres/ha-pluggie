@@ -1,3 +1,14 @@
+## v0.4.3
+
+- bump versions:
+  - cryptography 46.0.3 --> 46.0.5
+  - certbot 5.2.2 --> 5.3.1
+- fix warning class not being removed on validation success (Pluggie sidebar)
+
+- DEPRECATION NOTICE:
+  - platforms armhf, armv7 and i386 are not supported in HomeAssistant anymore and will be removed in next release (0.5.0) of HomeAssistant Edition of Pluggie. This does not affect this Docker Edition you are running.
+
+
 ## v0.4.2
 
 - fix day/night view of Pluggie sidebar

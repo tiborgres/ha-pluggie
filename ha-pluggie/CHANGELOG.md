@@ -1,3 +1,12 @@
+## v0.4.4
+
+- bump versions:
+  - wireguard-tools 0.5.3 --> 0.6.0
+
+- DEPRECATION NOTICE:
+  - platforms armhf, armv7 and i386 are not supported in HomeAssistant anymore and will be removed in next release (0.5.0). This does not affect the Docker Edition of Pluggie.
+
+
 ## v0.4.3
 
 - bump versions:

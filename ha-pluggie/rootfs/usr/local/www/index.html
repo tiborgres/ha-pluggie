@@ -345,6 +345,11 @@
         .theme-dark .spinner-border {
             color: var(--highlight-blue);
         }
+
+        .theme-dark code {
+            color: var(--text-light);
+            background-color: rgba(255, 255, 255, 0.08);
+        }
     </style>
 </head>
 
@@ -364,7 +369,7 @@
                     <div class="row justify-content-center">
                         <div class="col-12 col-md-8 col-lg-6 col-xl-5">
                             <div class="text-center mb-4">
-                                <h2>Settings</h2>
+                                <h2>Status</h2>
                             </div>
 
                             <div class="card">
@@ -384,7 +389,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <form id="configForm">
+                                    <form id="statusForm">
                                         <!-- Hostname -->
                                         <div id="hostname-container" class="mb-3" style="display: none;">
                                             <label class="form-label">Hostname</label>
@@ -414,6 +419,60 @@
                                                 <small id="traffic-reset-hint" class="form-hint text-muted" style="font-size: 0.8rem;">When traffic counter goes to zero</small>
                                             </div>
                                         </div>
+                                        <!-- Certificate Verification -->
+                                        <div id="cert-verify-container" class="mb-3" style="display: none;">
+                                            <label class="form-label">Certificate Verification</label>
+                                            <div id="cert-verify-status" class="d-flex align-items-center mb-2">
+                                                <span id="cert-verify-icon" class="me-2"></span>
+                                                <span id="cert-verify-text">Checking...</span>
+                                            </div>
+                                            <div id="cert-verify-details" style="display: none;">
+                                                <div class="mb-1">
+                                                    <small class="text-muted">Certificate on your device (SHA-256):</small>
+                                                    <div class="d-flex align-items-center">
+                                                        <code id="cert-local-fp" class="small text-break" style="font-size: 0.72rem;"></code>
+                                                        <button type="button" class="btn btn-icon btn-ghost-secondary btn-sm ms-1" onclick="copyToClipboard(document.getElementById('cert-local-fp').textContent, this)">
+                                                            <i class="ti ti-copy" style="font-size: 0.85rem;"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div class="mb-1">
+                                                    <small class="text-muted">Certificate visible from the internet (SHA-256):</small>
+                                                    <div class="d-flex align-items-center">
+                                                        <code id="cert-remote-fp" class="small text-break" style="font-size: 0.72rem;"></code>
+                                                        <button type="button" class="btn btn-icon btn-ghost-secondary btn-sm ms-1" onclick="copyToClipboard(document.getElementById('cert-remote-fp').textContent, this)">
+                                                            <i class="ti ti-copy" style="font-size: 0.85rem;"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div id="certPathHint" class="mt-2" style="display:none;">
+                                                    <small class="text-muted">
+                                                        Certificate files: <code id="certPath" style="font-size: 0.72rem;"></code>
+                                                        <span id="certHintText"></span>
+                                                    </small>
+                                                </div>
+                                                <div class="mt-1">
+                                                    <small id="cert-verify-time" class="text-muted"></small>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center mt-1">
+                                                <small class="form-hint me-2">Verifies that the relay server is not intercepting your encrypted traffic</small>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" id="cert-refresh-btn" onclick="refreshCertVerification()" title="Refresh now">
+                                                    <i class="ti ti-refresh" style="font-size: 0.85rem;"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="text-center mb-4 mt-4">
+                                <h2>Settings</h2>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-body">
+                                    <form id="settingsForm">
                                         <!-- Access Key -->
                                         <div class="mb-3">
                                             <label class="form-label">Access Key</label>
@@ -608,7 +667,7 @@
         }
 
         function setupValidation() {
-            const form = document.getElementById('configForm');
+            const form = document.getElementById('settingsForm');
             const inputs = form.querySelectorAll('input, select, textarea');
 
             inputs.forEach(input => {
@@ -1172,6 +1231,94 @@
             }
         }
 
+        function updateCertPath(data) {
+            const certPathHint = document.getElementById('certPathHint');
+            const certPath = document.getElementById('certPath');
+            const certHintText = document.getElementById('certHintText');
+            if (certPathHint && certPath && data.cert_dir) {
+                certPath.textContent = data.cert_dir;
+                certHintText.textContent = data.cert_hint || '';
+                certPathHint.style.display = 'block';
+            }
+        }
+
+        async function loadCertVerification() {
+            try {
+                const response = await fetch('./pluggie/api/cert-verify');
+                const data = await response.json();
+
+                const container = document.getElementById('cert-verify-container');
+                const icon = document.getElementById('cert-verify-icon');
+                const text = document.getElementById('cert-verify-text');
+                const details = document.getElementById('cert-verify-details');
+                const localFp = document.getElementById('cert-local-fp');
+                const remoteFp = document.getElementById('cert-remote-fp');
+                const timeEl = document.getElementById('cert-verify-time');
+
+                container.style.display = 'block';
+
+                if (data.status === 'verified' && data.match === true) {
+                    icon.innerHTML = '<i class="ti ti-circle-check text-success" style="font-size: 1.3rem;"></i>';
+                    text.innerHTML = '<span class="text-success">Connection is secure – certificates match</span>';
+                    details.style.display = 'block';
+                    localFp.textContent = data.local_fingerprint || 'N/A';
+                    remoteFp.textContent = data.remote_fingerprint || 'N/A';
+                    updateCertPath(data);
+                } else if (data.status === 'mismatch') {
+                    icon.innerHTML = '<i class="ti ti-alert-triangle text-danger" style="font-size: 1.3rem;"></i>';
+                    text.innerHTML = '<span class="text-danger">ERROR: Certificate mismatch – possible interception!</span>';
+                    details.style.display = 'block';
+                    localFp.textContent = data.local_fingerprint || 'N/A';
+                    remoteFp.textContent = data.remote_fingerprint || 'N/A';
+                    updateCertPath(data);
+                } else if (data.status === 'pending') {
+                    icon.innerHTML = '<i class="ti ti-clock text-muted" style="font-size: 1.3rem;"></i>';
+                    text.innerHTML = '<span class="text-muted">Verification pending – first check will run shortly</span>';
+                    details.style.display = 'none';
+                } else if (data.status === 'skipped') {
+                    icon.innerHTML = '<i class="ti ti-minus text-muted" style="font-size: 1.3rem;"></i>';
+                    text.innerHTML = '<span class="text-muted">Verification skipped – tunnel not active</span>';
+                    details.style.display = 'none';
+                } else {
+                    icon.innerHTML = '<i class="ti ti-alert-circle text-warning" style="font-size: 1.3rem;"></i>';
+                    text.innerHTML = '<span class="text-warning">Verification error: ' + (data.error || 'unknown') + '</span>';
+                    details.style.display = 'none';
+                }
+
+                if (data.timestamp) {
+                    const localTime = formatLocalDateTime(data.timestamp);
+                    timeEl.textContent = 'Last checked: ' + localTime + ' UTC';
+                }
+            } catch (error) {
+                console.debug('Cert verification load failed:', error);
+            }
+        }
+
+        async function refreshCertVerification() {
+            const btn = document.getElementById('cert-refresh-btn');
+            const icon = document.getElementById('cert-verify-icon');
+            const text = document.getElementById('cert-verify-text');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width: 0.85rem; height: 0.85rem;"></span>';
+            icon.innerHTML = '<span class="spinner-border spinner-border-sm text-muted"></span>';
+            text.innerHTML = '<span class="text-muted">Verifying...</span>';
+
+            try {
+                const response = await fetch('./pluggie/api/cert-verify/refresh');
+                const data = await response.json();
+
+                // Reload the UI with fresh data
+                await loadCertVerification();
+            } catch (error) {
+                console.error('Cert verification refresh failed:', error);
+                text.innerHTML = '<span class="text-warning">Refresh failed</span>';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-refresh" style="font-size: 0.85rem;"></i>';
+            }
+        }
+
         function formatLocalDateTime(utcDateStr) {
             if (!utcDateStr || utcDateStr === 'None') return 'N/A';
             try {
@@ -1274,6 +1421,7 @@
                 // Load Traffic Data only if access_key is valid
                 if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
                     await loadTrafficData();
+                    await loadCertVerification();
                 }
 
                 // Reset form changed flag after loading
@@ -1590,6 +1738,7 @@
 
                 if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
                     await loadTrafficData();
+                    await loadCertVerification();
                 }
             } catch (error) {
                 console.debug('Periodic traffic update failed:', error);

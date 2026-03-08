@@ -1,3 +1,12 @@
+## v0.4.5
+
+- feature:
+  - Added SSL certificate fingerprint verification with MITM detection, API reporting, and email alerts on mismatch
+
+- DEPRECATION NOTICE:
+  - platforms armhf, armv7 and i386 are not supported in HomeAssistant anymore and will be removed in release 0.5.0. This does not affect the Docker Edition of Pluggie.
+
+
 ## v0.4.4
 
 - bump versions:

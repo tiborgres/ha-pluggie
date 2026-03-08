@@ -62,6 +62,7 @@ if ! bashio::fs.file_exists "${ADDON_OPTIONS}"; then
   "pluggie_config": {
     "apiserver": "api.pluggie.net",
     "dns": "1.1.1.1",
+    "doh_resolvers": ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"],
     "http_port": 54001
   }
 }

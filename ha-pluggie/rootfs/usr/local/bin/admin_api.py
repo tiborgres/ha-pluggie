@@ -10,6 +10,7 @@ import signal
 import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.parse
+from cert_verify import start_verification_thread, get_last_result, run_verification
 from logger import setup_logging, reload_options_log_level
 
 OPTIONS_FILE = "/data/pluggie.json"
@@ -362,6 +363,44 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                         logging.warning("Broken pipe error while sending error response")
                         return
 
+            elif self.path == '/pluggie/api/cert-verify':
+                try:
+                    result = get_last_result()
+                    self._set_headers()
+                    self.wfile.write(json.dumps(result).encode())
+                except BrokenPipeError:
+                    logging.warning("Broken pipe error when returning cert verify")
+                    return
+                except Exception as e:
+                    logging.error(f"Error in cert-verify endpoint: {e}")
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode())
+                    except BrokenPipeError:
+                        logging.warning("Broken pipe error while sending error response")
+                        return
+
+            elif self.path == '/pluggie/api/cert-verify/refresh':
+                try:
+                    result = run_verification()
+                    from cert_verify import _save_result
+                    _save_result(result)
+                    self._set_headers()
+                    self.wfile.write(json.dumps(result).encode())
+                except BrokenPipeError:
+                    logging.warning("Broken pipe error when refreshing cert verify")
+                    return
+                except Exception as e:
+                    logging.error(f"Error in cert-verify refresh: {e}")
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode())
+                    except BrokenPipeError:
+                        logging.warning("Broken pipe error while sending error response")
+                        return
+
             else:
                 try:
                     self.send_response(404)
@@ -532,6 +571,10 @@ def run(server_class=HTTPServer, handler_class=AdminAPIHandler, port=8000):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
     logging.debug(f'Starting admin server on port {port}...')
+
+    # Start certificate verification background thread
+    start_verification_thread()
+
     httpd.serve_forever()
 
 

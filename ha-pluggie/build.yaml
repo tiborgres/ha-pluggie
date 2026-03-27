@@ -7,6 +7,6 @@ build_from:
   i386: ghcr.io/home-assistant/i386-base-python:3.13-alpine3.22
 args:
   CRYPTOGRAPHY_VERSION: 46.0.5
-  CERTBOT_VERSION: 5.3.1
-  ACME_VERSION: 5.3.1
+  CERTBOT_VERSION: 5.4.0
+  ACME_VERSION: 5.4.0
   WIREGUARDTOOLS_VERSION: 0.6.0

@@ -1,3 +1,11 @@
+## v0.5.0
+
+- bump versions:
+  - alpinelinux 3.22 --> 3.23
+  - python 3.13 --> 3.14
+  - cryptography 46.0.5 --> 46.0.6
+
+
 ## v0.4.6
 
 - lower S6_VERBOSITY log level 1 --> 0

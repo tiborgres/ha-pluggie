@@ -1,3 +1,10 @@
+## v0.5.1
+
+- bump versions:
+  - certbot 5.4.0 --> 5.5.0
+  - cryptography 46.0.6 --> 46.0.7
+
+
 ## v0.5.0
 
 - removed armhf, armv7 and i386, support for these platforms ended in v0.4.6

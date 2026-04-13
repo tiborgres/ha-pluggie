@@ -209,6 +209,13 @@ if [ "${vpn_restart_needed}" = true ]; then
 
     bashio::log.warning "Refreshing Pluggie configuration from API server.."
     if /usr/local/bin/get_config.py $(bashio::config 'configuration.access_key'); then
+
+        # Check if Pluggie endpoint was unreachable (API rolled back, config unchanged)
+        if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "endpoint_unreachable" ]; then
+            bashio::log.warning "Pluggie endpoint unreachable. Keeping existing WireGuard configuration, will retry next cycle."
+            exit 0
+        fi
+
         bashio::log.debug "Pluggie configuration refreshed."
 
         bashio::log.warning "Restarting WireGuard interface ${PLUGGIE_INTERFACE1}.."

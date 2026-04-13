@@ -266,18 +266,30 @@ while [ ${api_connected} -eq 0 ]; do
     else
         ret=$?
         if [ $ret -eq 1 ]; then
-            # Check if access_key is really invalid or there are just connectivity issues
-            if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "connectivity_issue" ]; then
-                # If there are connectivity issues but we have existing configuration
-                # just carry on with current configuration
+            current_state=""
+            if [ -f "/etc/pluggie.state" ]; then
+                current_state=$(cat /etc/pluggie.state)
+            fi
+
+            if [ "${current_state}" = "connectivity_issue" ]; then
+                # API unreachable but we have existing WG configuration
                 bashio::log.warning "Connectivity issues detected, continuing with existing configuration."
                 api_connected=1
-            else
-                echo "invalid_key" > "/etc/pluggie.state"
 
-                # Remove obsolete configuration from options.json only in case of truly invalid key
+            elif [ "${current_state}" = "no_connection" ]; then
+                # API unreachable and no existing WG configuration — just retry
+                bashio::log.warning "Cannot reach API server and no existing configuration. Retrying in 30 seconds..."
+                sleep 30
+
+            elif [ "${current_state}" = "endpoint_unreachable" ]; then
+                # API works but Pluggie endpoint is down, no existing WG config — retry
+                bashio::log.warning "Pluggie endpoint unreachable and no existing configuration. Retrying in 30 seconds..."
+                sleep 30
+
+            elif [ "${current_state}" = "invalid_key" ]; then
+                # Truly invalid access key (confirmed by API server with 401)
+                # Remove obsolete tunnel configuration from pluggie.json
                 temp_file=$(mktemp)
-                ADDON_OPTIONS="/data/options.json"
                 jq '.pluggie_config = (.pluggie_config // {}) |
                     del(.pluggie_config.interface1) |
                     del(.pluggie_config.hostname) |
@@ -288,21 +300,16 @@ while [ ${api_connected} -eq 0 ]; do
                     del(.pluggie_config.https_port) |
                     del(.pluggie_config.endpoint1_short) |
                     del(.pluggie_config.endpoint1_ip) |
-                    del(.pluggie_config.endpoint1_ip_int)' "${ADDON_OPTIONS}" > "${temp_file}" && mv "${temp_file}" "${ADDON_OPTIONS}"
+                    del(.pluggie_config.endpoint1_ip_int)' /data/pluggie.json > "${temp_file}" && mv "${temp_file}" /data/pluggie.json
 
                 api_connected=1
                 bashio::log.warning "Invalid Access Key. Please check settings in web interface."
 
+            else
+                # Unknown state — treat as connectivity problem, retry
+                bashio::log.warning "get_config.py failed (state: '${current_state}'). Retrying in 30 seconds..."
+                sleep 30
             fi
-        fi
-
-        # If there is no connection but script can carry on with existing configuration
-        if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "connectivity_issue" ]; then
-            bashio::log.warning "Continuing with existing configuration due to connectivity issues."
-            api_connected=1
-        else
-            bashio::log.warning "Failed to connect to API, retrying in 30 seconds..."
-            sleep 30
         fi
     fi
 done

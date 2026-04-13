@@ -1,3 +1,10 @@
+## v0.5.2
+
+- improved self-recovery during API server or Pluggie endpoint outages:
+  - added proper error states (no_connection, endpoint_unreachable) to prevent misclassifying network issues as invalid access key
+  - fixed configuration cleanup targeting pluggie.json instead of HA-managed options.json
+
+
 ## v0.5.1
 
 - bump versions:

@@ -57,6 +57,32 @@ def resolve_hostname(hostname):
         return None
 
 
+def load_or_generate_keypair(pluggie_dir):
+    """Load existing keypair from persistent storage or generate new one."""
+    key_file = f"{pluggie_dir}/wireguard/client_key"
+
+    if os.path.exists(key_file):
+        try:
+            with open(key_file, 'r') as f:
+                stored_key = f.read().strip()
+            p_key = WireguardKey(stored_key)
+            logging.debug("Loaded existing keypair from persistent storage.")
+            return str(p_key), str(p_key.public_key())
+        except Exception as e:
+            logging.warning(f"Failed to load stored keypair: {e}. Generating new one.")
+
+    p_key = WireguardKey.generate()
+    private_key, public_key = str(p_key), str(p_key.public_key())
+
+    os.makedirs(f"{pluggie_dir}/wireguard", exist_ok=True)
+    with open(key_file, 'w') as f:
+        f.write(private_key)
+    os.chmod(key_file, 0o600)
+
+    logging.debug("Generated and saved new keypair.")
+    return private_key, public_key
+
+
 def main():
     logger = setup_logging()
 
@@ -76,8 +102,12 @@ def main():
         logging.error(f"Error: apiserver not set in pluggie.json. Please Rebuild Pluggie Add-on.")
         sys.exit(1)
 
-    p_key = WireguardKey.generate()
-    private_key, public_key = str(p_key), str(p_key.public_key())
+    if os.environ.get("SUPERVISOR_TOKEN"):
+        pluggie_dir = "/ssl/pluggie"
+    else:
+        pluggie_dir = "/data"
+
+    private_key, public_key = load_or_generate_keypair(pluggie_dir)
 
     try:
         timeout = 10
@@ -89,11 +119,14 @@ def main():
         data = {"access_key": args.access_key, "public_key": public_key}
 
         try:
-            health_check = requests.head(f"https://{api_server}/health", timeout=5)
-            connectivity_ok = health_check.status_code == 200
+            ping_url = f"https://{api_server}/api/ping"
+            ping_response = requests.head(ping_url, headers=headers, timeout=5)
+            connectivity_ok = ping_response.status_code < 500
         except requests.exceptions.RequestException:
             connectivity_ok = False
-            logging.warning(f"Cannot reach API server {api_server} - connectivity issue.")
+            logging.warning(
+                f"Cannot reach API server {api_server} - connectivity issue."
+            )
 
         try:
             response = requests.post(api_url, headers=headers, json=data, timeout=timeout)
@@ -112,17 +145,24 @@ def main():
                 with open("/etc/pluggie.state", "w") as f:
                     f.write("disabled")
                 return
+            elif response.status_code == 503:
+                logging.warning("Temporary server issue. Using existing configuration.")
+                with open("/etc/pluggie.state", "w") as f:
+                    f.write("endpoint_unreachable")
+                # POST was rolled back, skip to GET to retrieve existing config
             else:
                 # Check connectivity issues
                 if not connectivity_ok:
                     logging.warning(f"API request failed (status code {response.status_code}), but connectivity issues detected. Continuing with existing configuration.")
-                    # Check for existing WireGuard interface in configuration
                     interface1 = options.get('pluggie_config', {}).get('interface1')
                     if interface1 and os.path.exists(f"/etc/wireguard/{interface1}.conf"):
-                        # Set connectivity_issue state
                         with open("/etc/pluggie.state", "w") as f:
                             f.write("connectivity_issue")
                         return 0
+                    else:
+                        with open("/etc/pluggie.state", "w") as f:
+                            f.write("no_connection")
+                        sys.exit(1)
                 logging.error(f"Error uploading Public Key to API server, Error: {response.status_code}")
                 sys.exit(1)
 
@@ -133,12 +173,13 @@ def main():
             interface1 = options.get('pluggie_config', {}).get('interface1')
             if interface1 and os.path.exists(f"/etc/wireguard/{interface1}.conf"):
                 logging.info("Continuing with existing WireGuard configuration due to connectivity issues.")
-                # Set connectivity_issue state
                 with open("/etc/pluggie.state", "w") as f:
                     f.write("connectivity_issue")
                 return 0
             else:
                 logging.error("No existing configuration found and cannot connect to API. Exiting.")
+                with open("/etc/pluggie.state", "w") as f:
+                    f.write("no_connection")
                 sys.exit(1)
 
         response = requests.get(api_url, headers=headers, timeout=timeout)

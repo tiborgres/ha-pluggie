@@ -1,3 +1,11 @@
+## v0.5.3
+
+- cert verification triggered immediately after reconnect
+
+- bump versions:
+  - cryptography 46.0.7 --> 47.0.0
+
+
 ## v0.5.2
 
 - improved self-recovery during API server or Pluggie endpoint outages:

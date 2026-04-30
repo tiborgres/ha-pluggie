@@ -251,4 +251,10 @@ if [ "${vpn_restart_needed}" = true ]; then
     fi
 else
     bashio::log.debug "VPN connection is healthy. No need to restart WireGuard."
+    # Update state to enabled if it was connectivity_issue (recovered from outage)
+    if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "connectivity_issue" ]; then
+        bashio::log.info "Connectivity restored, updating state to enabled."
+        echo "enabled" > "/etc/pluggie.state"
+        touch /tmp/cert_verify_trigger
+    fi
 fi

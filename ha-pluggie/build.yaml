@@ -4,7 +4,7 @@ build_from:
   amd64: ghcr.io/home-assistant/amd64-base-python:3.14-alpine3.23
 
 args:
-  CRYPTOGRAPHY_VERSION: 46.0.7
+  CRYPTOGRAPHY_VERSION: 47.0.0
   CERTBOT_VERSION: 5.5.0
   ACME_VERSION: 5.5.0
   WIREGUARDTOOLS_VERSION: 0.6.0

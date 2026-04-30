@@ -27,6 +27,9 @@ OPTIONS_FILE = "/data/pluggie.json"
 CERT_VERIFY_FILE = "/tmp/cert_verify.json"
 VERIFY_INTERVAL = 3600  # 1 hour
 INITIAL_DELAY = 120  # 2 minutes after startup
+TRIGGER_FILE = "/tmp/cert_verify_trigger"
+
+_wakeup_event = threading.Event()
 
 
 def _load_doh_resolvers():
@@ -301,7 +304,7 @@ def run_verification():
             result["error"] = "Failed to retrieve remote certificate"
             return result
 
-        # Step 4: get local certificate fingerprint
+        # Step 3: get local certificate fingerprint
         local_fp = _get_local_cert_fingerprint(hostname)
         result["local_fingerprint"] = local_fp
 
@@ -319,7 +322,7 @@ def run_verification():
             result["error"] = "Failed to read local certificate"
             return result
 
-        # Step 5: compare
+        # Step 4: compare
         result["match"] = (local_fp == remote_fp)
         result["status"] = "verified" if result["match"] else "mismatch"
 
@@ -398,22 +401,44 @@ def _report_to_apiserver(result):
         logging.debug("Failed to report cert verify to apiserver: %s", exc)
 
 
+def trigger_verification():
+    """
+    Signal the verification loop to run immediately.
+
+    Called after a successful reconnect to skip the remaining sleep
+    interval and run a fresh certificate check right away.
+    """
+    _wakeup_event.set()
+
+
 def verification_loop():
     """
     Background loop that runs verification periodically.
 
+    Wakes up immediately when _wakeup_event is set or TRIGGER_FILE
+    appears on disk (written by shell scripts after a reconnect).
     Intended to be started as a daemon thread from admin_api.py.
     """
-    logger = get_logger("cert_verify")
+    get_logger("cert_verify")
     logging.debug(
         "Certificate verification thread started (interval: %ds)",
         VERIFY_INTERVAL,
     )
 
-    # Initial delay to let services fully start
-    time.sleep(INITIAL_DELAY)
+    # Initial delay to let services fully start; honour early triggers.
+    if not os.path.exists(TRIGGER_FILE):
+        _wakeup_event.wait(timeout=INITIAL_DELAY)
+    _wakeup_event.clear()
 
     while True:
+        # Remove trigger file before running so a touch arriving
+        # during the check is not silently dropped.
+        try:
+            if os.path.exists(TRIGGER_FILE):
+                os.remove(TRIGGER_FILE)
+        except OSError:
+            pass
+
         try:
             result = run_verification()
             _save_result(result)
@@ -421,7 +446,18 @@ def verification_loop():
             logging.error(
                 "Unexpected error in verification loop: %s", exc,
             )
-        time.sleep(VERIFY_INTERVAL)
+
+        # Wait for next scheduled run, but wake early on event or
+        # trigger file appearing on disk (checked every 10 s).
+        deadline = time.monotonic() + VERIFY_INTERVAL
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            woken = _wakeup_event.wait(timeout=min(remaining, 10))
+            if woken:
+                _wakeup_event.clear()
+                break
+            if os.path.exists(TRIGGER_FILE):
+                break
 
 
 def start_verification_thread():

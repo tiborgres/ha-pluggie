@@ -1,3 +1,11 @@
+## v0.5.4
+
+- skip certbot startup call when certificate is still valid; periodic renewal added for long-running instances
+
+- bump versions:
+  - cryptography 47.0.0 --> 48.0.0
+
+
 ## v0.5.3
 
 - cert verification triggered immediately after reconnect

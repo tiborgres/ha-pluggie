@@ -51,6 +51,55 @@ restart_wireguard() {
     fi
 }
 
+# Function to check certificate expiry and trigger renewal if needed.
+# Rate-limited to one attempt per 12 hours via /tmp/last_cert_renew_attempt
+# to avoid hammering ACME during outages or in tight loops.
+check_cert_renewal() {
+    local user_agent
+    user_agent=$(bashio::config 'user_agent')
+    local pluggie_dir
+    if [[ "${user_agent}" == *"Pluggie-Client-HA"* ]]; then
+        pluggie_dir=/ssl/pluggie
+    else
+        pluggie_dir=/data
+    fi
+
+    local cert_path="${pluggie_dir}/letsencrypt/live/${PLUGGIE_HOSTNAME}/fullchain.pem"
+    local renew_threshold_seconds=$((30 * 86400))
+    local rate_limit_file="/tmp/last_cert_renew_attempt"
+    local rate_limit_seconds=$((12 * 3600))
+
+    if [ ! -f "${cert_path}" ]; then
+        bashio::log.debug "No certificate at ${cert_path}, skipping renewal check."
+        return 0
+    fi
+
+    if openssl x509 -in "${cert_path}" -noout -checkend "${renew_threshold_seconds}" >/dev/null 2>&1; then
+        bashio::log.debug "Certificate is valid for more than 30 days, no renewal needed."
+        return 0
+    fi
+
+    # Cert is within renewal window. Apply rate limit.
+    if [ -f "${rate_limit_file}" ]; then
+        local last_attempt
+        last_attempt=$(cat "${rate_limit_file}" 2>/dev/null || echo 0)
+        local now
+        now=$(date +%s)
+        local elapsed=$((now - last_attempt))
+        if [ "${elapsed}" -lt "${rate_limit_seconds}" ]; then
+            bashio::log.debug "Cert renewal attempted ${elapsed}s ago, waiting for rate limit (${rate_limit_seconds}s)."
+            return 0
+        fi
+    fi
+
+    bashio::log.debug "Certificate expires within 30 days. Triggering renewal."
+    date +%s > "${rate_limit_file}"
+
+    # letsencrypt/run handles ACME failure gracefully (keeps existing cert) and
+    # reloads nginx on success.
+    /etc/services.d/letsencrypt/run
+}
+
 log_level=$(bashio::config 'log_level' 'info')
 bashio::log.level "${log_level}"
 export LOG_LEVEL=$(bashio::config 'log_level' 'info')
@@ -258,3 +307,6 @@ else
         touch /tmp/cert_verify_trigger
     fi
 fi
+
+# Periodic certificate renewal check
+check_cert_renewal

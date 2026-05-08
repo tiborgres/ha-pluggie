@@ -214,13 +214,48 @@ if [[ "${__BASHIO_LOG_LEVEL}" -eq "${__BASHIO_LOG_LEVEL_DEBUG}" ]]; then
 else
     QUIET_OPT="--quiet"
 fi
-certbot certonly ${QUIET_OPT} --non-interactive --keep-until-expiring --expand \
-    --email "${PLUGGIE_EMAIL}" --agree-tos \
-    "${KEY_ARGUMENTS[@]}" \
-    --cert-name "${DOMAIN_ARR[1]}" "${DOMAIN_ARR[@]}" \
-    --config-dir "$CERT_DIR" --work-dir "$WORK_DIR" \
-    --preferred-challenges "http" "${ACME_CUSTOM_SERVER_ARGUMENTS[@]}" --standalone \
-    --preferred-chain "ISRG Root X1"
+
+# Skip certbot if existing certificate is still valid for more than RENEW_THRESHOLD_DAYS.
+# This matches certbot's own default renewal threshold, so behaviour is unchanged for
+# healthy ACME servers but avoids unnecessary contact with ACME during outages.
+RENEW_THRESHOLD_DAYS=30
+EXISTING_CERT="${CERT_DIR}/live/${DOMAIN_ARR[1]}/fullchain.pem"
+SKIP_CERTBOT=0
+
+if [ -f "${EXISTING_CERT}" ]; then
+    THRESHOLD_SECONDS=$((RENEW_THRESHOLD_DAYS * 86400))
+    if openssl x509 -in "${EXISTING_CERT}" -noout -checkend "${THRESHOLD_SECONDS}" >/dev/null 2>&1; then
+        EXP_DATE=$(openssl x509 -in "${EXISTING_CERT}" -noout -enddate 2>/dev/null | cut -d= -f2)
+        bashio::log.debug "Existing certificate for ${DOMAIN_ARR[1]} is valid for more than ${RENEW_THRESHOLD_DAYS} days (expires: ${EXP_DATE}). Skipping certbot."
+        SKIP_CERTBOT=1
+    else
+        bashio::log.debug "Existing certificate for ${DOMAIN_ARR[1]} expires within ${RENEW_THRESHOLD_DAYS} days. Will attempt renewal."
+    fi
+else
+    bashio::log.debug "No existing certificate for ${DOMAIN_ARR[1]}. Will request a new one."
+fi
+
+if [ "${SKIP_CERTBOT}" -eq 0 ]; then
+    if certbot certonly ${QUIET_OPT} --non-interactive --keep-until-expiring --expand \
+        --email "${PLUGGIE_EMAIL}" --agree-tos \
+        "${KEY_ARGUMENTS[@]}" \
+        --cert-name "${DOMAIN_ARR[1]}" "${DOMAIN_ARR[@]}" \
+        --config-dir "$CERT_DIR" --work-dir "$WORK_DIR" \
+        --preferred-challenges "http" "${ACME_CUSTOM_SERVER_ARGUMENTS[@]}" --standalone \
+        --preferred-chain "ISRG Root X1"; then
+        bashio::log.debug "certbot completed successfully."
+    else
+        # certbot failed (e.g. ACME server outage). With --keep-until-expiring it does
+        # not delete existing files, so we can fall back to the current certificate if
+        # one exists and is not yet expired.
+        if [ -f "${EXISTING_CERT}" ] && openssl x509 -in "${EXISTING_CERT}" -noout -checkend 0 >/dev/null 2>&1; then
+            EXP_DATE=$(openssl x509 -in "${EXISTING_CERT}" -noout -enddate 2>/dev/null | cut -d= -f2)
+            bashio::log.warning "Could not renew certificate (ACME server may be unavailable). Continuing with existing certificate (expires: ${EXP_DATE})."
+        else
+            bashio::log.error "Could not obtain certificate and no usable existing certificate found. HTTPS will be unavailable until ACME server is reachable again."
+        fi
+    fi
+fi
 
 # Get cert directory
 # shellcheck disable=SC2012

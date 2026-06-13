@@ -1360,13 +1360,28 @@
             }
         }
 
+        async function fetchAccessKey() {
+            try {
+                const response = await fetch('./pluggie/api/access-key');
+                const data = await response.json();
+                return {
+                    accessKey: data.access_key || '',
+                    isSet: Boolean(data.access_key_set)
+                };
+            } catch (error) {
+                console.error('Error fetching access key:', error);
+                return { accessKey: '', isSet: false };
+            }
+        }
+
         async function loadConfig(retryCount = 0) {
             try {
                 const response = await fetch('./pluggie/api/options');
                 const data = await response.json();
 
-                if (data.configuration && data.configuration.access_key) {
-                    currentAccessKey = data.configuration.access_key;
+                if (data.configuration && data.configuration.access_key_set) {
+                    const keyInfo = await fetchAccessKey();
+                    currentAccessKey = keyInfo.accessKey;
                     updateAccessKeyDisplay();
 
                     const hostnameContainer = document.getElementById('hostname-container');
@@ -1419,7 +1434,7 @@
                 }
 
                 // Load Traffic Data only if access_key is valid
-                if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
+                if (data.configuration && data.configuration.access_key_set) {
                     await loadTrafficData();
                     await loadCertVerification();
                 }
@@ -1736,7 +1751,7 @@
                 const response = await fetch('./pluggie/api/options');
                 const data = await response.json();
 
-                if (data.configuration && data.configuration.access_key && data.configuration.access_key !== 'XXXXX') {
+                if (data.configuration && data.configuration.access_key_set) {
                     await loadTrafficData();
                     await loadCertVerification();
                 }

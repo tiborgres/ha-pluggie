@@ -87,11 +87,21 @@ def main():
     logger = setup_logging()
 
     parser = argparse.ArgumentParser("get_config.py")
-    parser.add_argument("access_key", help="Access Key from tunnel profile", type=str)
-    args = parser.parse_args()
+    parser.parse_args()
 
-    # Načítame pluggie.json
     options = load_options()
+
+    # Read access_key from pluggie.json (single source of truth) with an
+    # optional env override for debug. Avoids passing it via argv where it
+    # would be visible in ps / /proc/<pid>/cmdline.
+    access_key = os.environ.get("PLUGGIE_ACCESS_KEY") \
+        or options.get('configuration', {}).get('access_key')
+
+    if not access_key or access_key == "XXXXX":
+        logging.fatal("No valid access_key configured in pluggie.json")
+        with open("/etc/pluggie.state", "w") as f:
+            f.write("invalid_key")
+        sys.exit(1)
 
     api_server = options.get('pluggie_config', {}).get('apiserver', 'api.pluggie.net')
     user_agent = options.get('user_agent', 'Pluggie-Client-Docker/Default')
@@ -99,7 +109,7 @@ def main():
     logging.debug(f"api_server: {api_server}")
 
     if not api_server:
-        logging.error(f"Error: apiserver not set in pluggie.json. Please Rebuild Pluggie Add-on.")
+        logging.error("Error: apiserver not set in pluggie.json. Please Rebuild Pluggie Add-on.")
         sys.exit(1)
 
     if os.environ.get("SUPERVISOR_TOKEN"):
@@ -113,10 +123,10 @@ def main():
         timeout = 10
         api_url = f"https://{api_server}/api/settings"
         headers = {
-            "Authorization": f"Bearer {args.access_key}",
+            "Authorization": f"Bearer {access_key}",
             "User-Agent": user_agent
         }
-        data = {"access_key": args.access_key, "public_key": public_key}
+        data = {"access_key": access_key, "public_key": public_key}
 
         try:
             ping_url = f"https://{api_server}/api/ping"
@@ -136,12 +146,12 @@ def main():
             elif response.status_code == 400:
                 logging.error(f"Invalid data, Error: {response.status_code}")
             elif response.status_code == 401:
-                logging.fatal(f"Invalid Access Key. Please check your access key in Pluggie Configuration.")
+                logging.fatal("Invalid Access Key. Please check your access key in Pluggie Configuration.")
                 with open("/etc/pluggie.state", "w") as f:
                     f.write("invalid_key")
                 return 0
             elif response.status_code == 403:
-                logging.fatal(f"Access denied: Your tunnel is currently disabled. Please contact support or check your subscription status.")
+                logging.fatal("Access denied: Your tunnel is currently disabled. Please contact support or check your subscription status.")
                 with open("/etc/pluggie.state", "w") as f:
                     f.write("disabled")
                 return

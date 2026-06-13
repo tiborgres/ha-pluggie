@@ -12,6 +12,41 @@ PLUGGIE_HOSTNAME=$(bashio::config 'pluggie_config.hostname' 'localhost')
 PLUGGIE_USERAGENT=$(bashio::config 'user_agent')
 DOMAIN=${PLUGGIE_HOSTNAME:-"localhost"}
 
+# Validate config values used in nginx directives. Values come from the API
+# response (TLS-trusted, server-side charset-validated) or pluggie.json
+# (potentially hand-edited). Reject before writing config so a bad value
+# cannot inject extra nginx directives via heredoc expansion.
+
+_is_uint() {
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+_is_dns_name() {
+    [ -n "$1" ] && [ ${#1} -le 253 ] && [[ "$1" =~ ^[A-Za-z0-9.-]+$ ]]
+}
+
+_is_clean_value() {
+    # No control chars that could close an nginx directive mid-value.
+    [ -n "$1" ] && ! [[ "$1" =~ [[:cntrl:]] ]]
+}
+
+if ! _is_uint "${PLUGGIE_HTTP_PORT}"; then
+    bashio::log.warning "Invalid http_port, falling back to 54001"
+    PLUGGIE_HTTP_PORT=54001
+fi
+if ! _is_uint "${PLUGGIE_HTTPS_PORT}"; then
+    bashio::log.warning "Invalid https_port, falling back to 54002"
+    PLUGGIE_HTTPS_PORT=54002
+fi
+
+HOSTNAME_VALID=1
+if ! _is_dns_name "${PLUGGIE_HOSTNAME}"; then
+    bashio::log.warning "Invalid hostname, HTTPS server block will be skipped"
+    HOSTNAME_VALID=0
+    PLUGGIE_HOSTNAME="localhost"
+    DOMAIN="localhost"
+fi
+
 if [[ "${PLUGGIE_USERAGENT}" == *"Pluggie-Client-Docker"* ]]; then
     PLATFORM="docker-pluggie"
     PLUGGIE_DIR=/data
@@ -101,7 +136,25 @@ fi
 PROXIED_PROTOCOL=$(echo "${PROXIED_HOST}" | sed -E 's#^(https?)://.*$#\1#')
 PROXIED_HOSTNAME=$(echo "${PROXIED_HOST}" | sed -E 's#^https?://([^:/]+).*$#\1#')
 
-if [ -f "${CERT_DIR}/fullchain.pem" ] && [ -f "${CERT_DIR}/privkey.pem" ]; then
+# Validate proxied target before generating HTTPS config. CR/LF or other
+# control chars in any of these values would close the current nginx
+# directive and inject new ones.
+PROXIED_VALID=1
+if ! _is_clean_value "${PROXIED_HOST}"; then
+    bashio::log.warning "proxied_host contains control characters, skipping HTTPS configuration"
+    PROXIED_VALID=0
+fi
+if ! _is_dns_name "${PROXIED_HOSTNAME}"; then
+    bashio::log.warning "Invalid proxied hostname, skipping HTTPS configuration"
+    PROXIED_VALID=0
+fi
+if [ "${PROXIED_PROTOCOL}" != "http" ] && [ "${PROXIED_PROTOCOL}" != "https" ]; then
+    bashio::log.warning "Invalid proxied protocol, skipping HTTPS configuration"
+    PROXIED_VALID=0
+fi
+
+if [ ${HOSTNAME_VALID} -eq 1 ] && [ ${PROXIED_VALID} -eq 1 ] \
+   && [ -f "${CERT_DIR}/fullchain.pem" ] && [ -f "${CERT_DIR}/privkey.pem" ]; then
     cat <<EOF > ${PLUGGIE_CONF}
 server {
     listen                        ${PLUGGIE_HTTPS_PORT} ssl;
@@ -128,16 +181,27 @@ EOF
     if [ ${IS_HOMEASSISTANT} -eq 0 ] && bashio::config.has_value "basic_auth_username" && bashio::config.has_value "basic_auth_password"; then
         mkdir -p /etc/nginx/auth
 
-        echo "$(bashio::config 'basic_auth_username'):$(openssl passwd -apr1 "$(bashio::config 'basic_auth_password')")" > /etc/nginx/auth/.htpasswd
-        chown -R nginx:nginx /etc/nginx/auth
-        chmod 600 /etc/nginx/auth/.htpasswd
+        basic_user=$(bashio::config 'basic_auth_username')
+        basic_pass=$(bashio::config 'basic_auth_password')
 
-        cat <<EOF >> ${PLUGGIE_CONF}
+        if ! _is_clean_value "${basic_user}" || [[ "${basic_user}" == *:* ]]; then
+            bashio::log.warning "Invalid basic_auth_username, skipping basic auth"
+        elif ! _is_clean_value "${basic_pass}"; then
+            bashio::log.warning "Invalid basic_auth_password, skipping basic auth"
+        else
+            # Pipe password via stdin so it doesn't appear in process args (ps).
+            hashed_pass=$(printf '%s' "${basic_pass}" | openssl passwd -apr1 -stdin)
+            printf '%s:%s\n' "${basic_user}" "${hashed_pass}" > /etc/nginx/auth/.htpasswd
+            chown -R nginx:nginx /etc/nginx/auth
+            chmod 600 /etc/nginx/auth/.htpasswd
+
+            cat <<EOF >> ${PLUGGIE_CONF}
         # Basic authentication
         auth_basic "Restricted Access";
         auth_basic_user_file /etc/nginx/auth/.htpasswd;
 
 EOF
+        fi
     fi
 
     cat <<EOF >> ${PLUGGIE_CONF}

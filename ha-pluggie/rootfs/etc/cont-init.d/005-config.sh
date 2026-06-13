@@ -31,7 +31,7 @@ else
     bashio::log.debug "Detected Docker environment"
 fi
 
-if ! bashio::fs.directory_exists '${PLUGGIE_DIR}'; then
+if ! bashio::fs.directory_exists "${PLUGGIE_DIR}"; then
     mkdir -p ${PLUGGIE_DIR} ||
         bashio::exit.nok "Could not create ${PLUGGIE_DIR} folder!"
 fi
@@ -82,7 +82,7 @@ else
     fi
 fi
 
-if ! bashio::fs.directory_exists '${PLUGGIE_DIR}/wireguard'; then
+if ! bashio::fs.directory_exists "${PLUGGIE_DIR}/wireguard"; then
     mkdir -p ${PLUGGIE_DIR}/wireguard ||
         bashio::exit.nok "Could not create wireguard storage folder!"
 fi
@@ -248,7 +248,7 @@ bashio::log.debug "api_connected: ${api_connected}"
 
 while [ ${api_connected} -eq 0 ]; do
     bashio::log.debug "Connecting to Pluggie API..."
-    if /usr/local/bin/get_config.py "$access_key"; then
+    if /usr/local/bin/get_config.py; then
         # Check tunnel state
         if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "disabled" ]; then
             bashio::log.warning "Tunnel is disabled. Will check again in 60 seconds..."

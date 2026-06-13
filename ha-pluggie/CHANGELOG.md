@@ -1,3 +1,12 @@
+## v0.5.5
+
+- security fixes and improvements
+
+- bump versions:
+  - cryptography 48.0.0 --> 48.0.1
+  - certbot 5.5.0 --> 5.6.0
+
+
 ## v0.5.4
 
 - skip certbot startup call when certificate is still valid; periodic renewal added for long-running instances

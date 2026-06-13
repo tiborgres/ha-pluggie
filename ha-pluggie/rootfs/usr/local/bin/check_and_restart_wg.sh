@@ -10,8 +10,21 @@ check_dns() {
         return 0
     fi
 
+    # Reject inputs containing shell metacharacters before passing to dig.
+    # Defense in depth against a compromised API response or hand-edited
+    # pluggie.json. DNS server accepts IPv4 and IPv6 literals.
+    if ! [[ "$hostname" =~ ^[A-Za-z0-9.-]+$ ]] || [ ${#hostname} -gt 253 ]; then
+        bashio::log.warning "Invalid hostname, skipping DNS check"
+        return 0
+    fi
+    if ! [[ "$dns_server" =~ ^[0-9A-Fa-f.:]+$ ]]; then
+        bashio::log.warning "Invalid DNS server, skipping DNS check"
+        return 0
+    fi
+
     bashio::log.debug "Checking ${hostname} using DNS ${dns_server}.." >&2
-    local ip=$(dig +short ${hostname} A @${dns_server} | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || echo "")
+    local ip
+    ip=$(dig +short "${hostname}" A "@${dns_server}" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || echo "")
     bashio::log.debug "IP for ${hostname} from ${dns_server}: ${ip}" >&2
     echo "$ip"
 }
@@ -129,7 +142,7 @@ vpn_restart_needed=false
 # Check if we dont have some variables empty
 if [ -z "$PLUGGIE_HOSTNAME" ] || [ -z "$PLUGGIE_ENDPOINT1_SHORT" ] || [ -z "$PLUGGIE_ENDPOINT1_IP_INT" ]; then
     bashio::log.debug "Attempting to get configuration from API server..."
-    if /usr/local/bin/get_config.py "${access_key}"; then
+    if /usr/local/bin/get_config.py; then
         # Read configuration from just refreshed /data/pluggie.json
         PLUGGIE_ENDPOINT1_SHORT=$(bashio::config 'pluggie_config.endpoint1_short')
         PLUGGIE_ENDPOINT1_IP=$(bashio::config 'pluggie_config.endpoint1_ip')
@@ -226,12 +239,15 @@ if [ -n "${CURRENT_ENDPOINT_IP}" ] && [ -n "${PLUGGIE_ENDPOINT1_IP}" ] && [ "${C
     bashio::log.warning "Pluggie endpoint IP address changed."
     vpn_restart_needed=true
 
-    # Get config from API to check if API server changed
-    response=$(curl -s -H "Authorization: Bearer $(bashio::config 'configuration.access_key')" "https://${PLUGGIE_APISERVER}/api/settings")
+    # Get config from API to check if apiserver also changed (migration scenario:
+    # operator moved tunnel to a new edge and reassigned the apiserver).
+    # Header piped via stdin so the bearer token doesn't appear in process args.
+    response=$(printf 'Authorization: Bearer %s\n' "$(bashio::config 'configuration.access_key')" \
+        | curl -s --header @- "https://${PLUGGIE_APISERVER}/api/settings")
     NEW_APISERVER=$(echo "${response}" | jq -r '.client_tunnel_settings.apiserver')
 
     # If API server changed, update it in config
-    if [ -n "${NEW_APISERVER}" ] && [ "${NEW_APISERVER}" != "${PLUGGIE_APISERVER}" ]; then
+    if [ -n "${NEW_APISERVER}" ] && [ "${NEW_APISERVER}" != "${PLUGGIE_APISERVER}" ] && [ "${NEW_APISERVER}" != "null" ]; then
         bashio::log.warning "API server changed from ${PLUGGIE_APISERVER} to ${NEW_APISERVER}"
 
         # Refresh /data/pluggie.json with jq
@@ -257,7 +273,7 @@ if [ "${vpn_restart_needed}" = true ]; then
     fi
 
     bashio::log.warning "Refreshing Pluggie configuration from API server.."
-    if /usr/local/bin/get_config.py $(bashio::config 'configuration.access_key'); then
+    if /usr/local/bin/get_config.py; then
 
         # Check if Pluggie endpoint was unreachable (API rolled back, config unchanged)
         if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "endpoint_unreachable" ]; then

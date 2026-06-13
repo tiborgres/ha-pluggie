@@ -58,6 +58,41 @@ def validate_url(url):
         return False, f"Invalid URL: {str(e)}"
 
 
+_ALLOWED_TOP_LEVEL_KEYS = frozenset({
+    'proxied_host',
+    'basic_auth_username',
+    'basic_auth_password',
+    'log_level',
+})
+
+_ALLOWED_CONFIGURATION_KEYS = frozenset({
+    'access_key',
+})
+
+
+def _sanitize_options(payload):
+    """Drop any keys outside the client-settable whitelist."""
+    if not isinstance(payload, dict):
+        return {}
+
+    sanitized = {}
+    for key in _ALLOWED_TOP_LEVEL_KEYS:
+        if key in payload:
+            sanitized[key] = payload[key]
+
+    raw_configuration = payload.get('configuration')
+    if isinstance(raw_configuration, dict):
+        sanitized_configuration = {
+            key: raw_configuration[key]
+            for key in _ALLOWED_CONFIGURATION_KEYS
+            if key in raw_configuration
+        }
+        if sanitized_configuration:
+            sanitized['configuration'] = sanitized_configuration
+
+    return sanitized
+
+
 # Signal handler for reloading config
 def signal_handler(sig, frame):
     logging.info("Received signal to reload config")
@@ -86,14 +121,13 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
     def _set_headers(self, content_type='application/json'):
         self.send_response(200)
         self.send_header('Content-type', content_type)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
 
     def do_OPTIONS(self):
-        self._set_headers()
+        self.send_response(405)
+        self.send_header('Allow', 'GET, POST, HEAD')
+        self.end_headers()
 
 
     def do_GET(self):
@@ -102,6 +136,17 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                 try:
                     with open(OPTIONS_FILE, 'r') as f:
                         options = json.load(f)
+
+                    # Strip the bearer credential from the bulk options dump.
+                    # Front-end fetches the raw value on demand via /pluggie/api/access-key.
+                    configuration = options.get('configuration')
+                    if isinstance(configuration, dict):
+                        access_key = configuration.get('access_key')
+                        configuration.pop('access_key', None)
+                        configuration['access_key_set'] = bool(
+                            access_key and access_key != 'XXXXX'
+                        )
+
                     self._set_headers()
                     self.wfile.write(json.dumps(options).encode())
                 except BrokenPipeError:
@@ -109,6 +154,29 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                     return
                 except Exception as e:
                     logging.error(f"Error reading options: {e}")
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": str(e)}).encode())
+                    except BrokenPipeError:
+                        logging.warning("Broken pipe error while sending error response")
+                        return
+
+            elif self.path == '/pluggie/api/access-key':
+                try:
+                    with open(OPTIONS_FILE, 'r') as f:
+                        options = json.load(f)
+                    access_key = options.get('configuration', {}).get('access_key')
+                    self._set_headers()
+                    self.wfile.write(json.dumps({
+                        "access_key": access_key or "",
+                        "access_key_set": bool(access_key and access_key != 'XXXXX')
+                    }).encode())
+                except BrokenPipeError:
+                    logging.warning("Broken pipe error when returning access key")
+                    return
+                except Exception as e:
+                    logging.error(f"Error reading access key: {e}")
                     try:
                         self.send_response(500)
                         self.end_headers()
@@ -422,7 +490,13 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                 try:
                     content_length = int(self.headers['Content-Length'])
                     post_data = self.rfile.read(content_length)
-                    options = json.loads(post_data.decode('utf-8'))
+                    raw_options = json.loads(post_data.decode('utf-8'))
+
+                    delay_apply = (
+                        raw_options.pop('delay_apply', False)
+                        if isinstance(raw_options, dict) else False
+                    )
+                    options = _sanitize_options(raw_options)
 
                     # Validate proxied_host if present
                     if 'proxied_host' in options and options['proxied_host']:
@@ -435,8 +509,6 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                                 "field": "proxied_host"
                             }).encode())
                             return
-
-                    delay_apply = options.pop('delay_apply', False) if isinstance(options, dict) else False
 
                     # Read the existing file to ensure we keep the structure
                     with open(OPTIONS_FILE, 'r') as f:

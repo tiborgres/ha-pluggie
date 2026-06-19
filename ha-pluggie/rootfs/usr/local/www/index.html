@@ -714,7 +714,7 @@
                 accessKeyValid = false;
                 showFieldError(accessKeyInput, accessKeyStatus, 'Access Key must be exactly 32 characters and contain only letters, numbers, and underscores');
             } else {
-                showFieldSuccess(accessKeyInput, accessKeyStatus, 'Access Key format is valid');
+                resetField(accessKeyInput, accessKeyStatus);
             }
 
             const proxiedHost = document.getElementById('proxied_host').value.trim();
@@ -1520,17 +1520,45 @@
         async function copyToClipboard(text, button) {
             if (!text) return;
 
+            // execCommand fallback: HA ingress is plain HTTP, no navigator.clipboard.
+            let copied = false;
             try {
-                await navigator.clipboard.writeText(text);
+                if (window.isSecureContext && navigator.clipboard) {
+                    await navigator.clipboard.writeText(text);
+                    copied = true;
+                }
+            } catch (error) {
+                console.error('navigator.clipboard failed:', error);
+            }
+
+            if (!copied) {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.top = '0';
+                    ta.style.left = '0';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    ta.setSelectionRange(0, text.length);
+                    copied = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                } catch (error) {
+                    console.error('execCommand copy failed:', error);
+                }
+            }
+
+            if (copied) {
                 const originalIcon = button.innerHTML;
                 button.innerHTML = '<i class="ti ti-check"></i>';
                 showToast('Copied to clipboard!', 'success');
                 setTimeout(() => {
                     button.innerHTML = originalIcon;
                 }, 2000);
-            } catch (error) {
+            } else {
                 showToast('Failed to copy to clipboard', 'danger');
-                console.error('Copy error:', error);
             }
         }
 

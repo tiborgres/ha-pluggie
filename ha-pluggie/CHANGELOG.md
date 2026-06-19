@@ -1,3 +1,11 @@
+## v0.5.6
+
+- fallback to default apiserver when configured one rejects the key; clipboard copy works on HA ingress HTTP
+
+- bump versions:
+  - alpine 3.23 --> 3.24
+
+
 ## v0.5.5
 
 - security fixes and improvements

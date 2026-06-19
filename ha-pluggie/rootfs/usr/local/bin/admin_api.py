@@ -13,7 +13,10 @@ import urllib.parse
 from cert_verify import start_verification_thread, get_last_result, run_verification
 from logger import setup_logging, reload_options_log_level
 
-OPTIONS_FILE = "/data/pluggie.json"
+if os.environ.get("SUPERVISOR_TOKEN"):
+    OPTIONS_FILE = "/ssl/pluggie/pluggie.json"
+else:
+    OPTIONS_FILE = "/data/pluggie.json"
 
 
 def validate_url(url):

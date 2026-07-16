@@ -1,3 +1,12 @@
+## v0.5.7
+
+- regenerate WireGuard keypair when access key is changed to prevent public key collision on server
+
+- bump versions:
+  - cryptography 48.0.1 --> 49.0.0
+  - certbot 5.6.0 --> 5.7.0
+
+
 ## v0.5.6
 
 - fallback to default apiserver when configured one rejects the key; clipboard copy works on HA ingress HTTP

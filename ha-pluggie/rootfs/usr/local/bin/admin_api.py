@@ -574,6 +574,35 @@ class AdminAPIHandler(BaseHTTPRequestHandler):
                                 with open("/tmp/restart_reason", "w") as f:
                                     f.write("access_key_changed")
 
+                                # Access key change means the tunnel is now
+                                # owned by a different Pluggie account. The
+                                # old WireGuard keypair is still registered
+                                # under the previous account's tunnel on the
+                                # apiserver, so reusing it would trigger a
+                                # public_key collision (HTTP 409). Drop the
+                                # persisted keypair so get_config.py's
+                                # load_or_generate_keypair generates a fresh
+                                # one on the next run.
+                                if os.environ.get("SUPERVISOR_TOKEN"):
+                                    pluggie_dir = "/ssl/pluggie"
+                                else:
+                                    pluggie_dir = "/data"
+                                stale_key = f"{pluggie_dir}/wireguard/client_key"
+                                try:
+                                    os.remove(stale_key)
+                                    logging.info(
+                                        f"Removed stale WireGuard keypair "
+                                        f"at {stale_key} so it will be "
+                                        f"regenerated for the new access key"
+                                    )
+                                except FileNotFoundError:
+                                    pass
+                                except Exception as e:
+                                    logging.warning(
+                                        f"Failed to remove stale WireGuard "
+                                        f"keypair {stale_key}: {e}"
+                                    )
+
                                 scripts = [
                                     "/etc/cont-finish.d/001-stop.sh",
                                     "/etc/cont-init.d/001-start.sh",

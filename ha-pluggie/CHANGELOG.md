@@ -1,3 +1,8 @@
+## v0.5.8
+
+- proxied_host empty-string no longer masked by bashio::config default, restoring the ha-pluggie Home Assistant proxy_pass fallback (502 Bad Gateway on empty proxied_host)
+
+
 ## v0.5.7
 
 - regenerate WireGuard keypair when access key is changed to prevent public key collision on server

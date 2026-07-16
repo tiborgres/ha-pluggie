@@ -107,7 +107,7 @@ server {
 }
 EOF
 
-PROXIED_HOST=$(bashio::config 'proxied_host' 'http://localhost:8080')
+PROXIED_HOST=$(bashio::config 'proxied_host')
 if [ -z "$PROXIED_HOST" ]; then
     if [ "$PLATFORM" = "ha-pluggie" ]; then
         bashio::log.debug "Home Assistant Pluggie detected, using default proxied_host"

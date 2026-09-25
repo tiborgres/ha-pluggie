@@ -16,4 +16,4 @@ else
 fi
 
 # clean environment
-rm -f /etc/pluggie.state /tmp/restart_reason
+rm -f /etc/pluggie.state /tmp/restart_reason /tmp/pluggie_health

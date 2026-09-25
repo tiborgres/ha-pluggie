@@ -1,3 +1,12 @@
+## v0.6.0
+
+- more reliable tunnel health check, fewer unnecessary reconnects
+
+- bump versions:
+  - cryptography 49.0.0 --> 50.0.1
+  - certbot 5.7.0 --> 5.8.0
+
+
 ## v0.5.8
 
 - proxied_host empty-string no longer masked by bashio::config default, restoring the ha-pluggie Home Assistant proxy_pass fallback (502 Bad Gateway on empty proxied_host)

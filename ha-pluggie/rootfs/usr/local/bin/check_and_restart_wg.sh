@@ -31,6 +31,7 @@ check_dns() {
 
 # Function to restart WireGuard
 restart_wireguard() {
+    health_reset_baseline
     bashio::log.debug "Stopping WireGuard interface.."
     # Capture output from wg-quick down
     if wg-quick down "${PLUGGIE_INTERFACE1}" 2>&1 | while IFS= read -r line; do
@@ -62,6 +63,128 @@ restart_wireguard() {
         bashio::log.error "Failed to start WireGuard interface."
         return 1
     fi
+}
+
+HEALTH_STATE="/tmp/pluggie_health"
+HEALTH_MAX_FAILS=2
+HEALTH_HANDSHAKE_MAX_AGE=180
+HEALTH_PING_ATTEMPTS=3
+HEALTH_BACKOFF=(60 120 240)
+
+# Load health state: rx baseline, consecutive failures, health restarts, next allowed restart
+health_load() {
+    h_rx="-"
+    h_fails=0
+    h_restarts=0
+    h_next=0
+    if [ -f "${HEALTH_STATE}" ]; then
+        read -r h_rx h_fails h_restarts h_next < "${HEALTH_STATE}" || true
+    fi
+    h_rx=${h_rx:--}
+    h_fails=${h_fails:-0}
+    h_restarts=${h_restarts:-0}
+    h_next=${h_next:-0}
+}
+
+health_save() {
+    echo "${h_rx} ${h_fails} ${h_restarts} ${h_next}" > "${HEALTH_STATE}"
+}
+
+# Drop rx baseline and failure count after WireGuard (re)start
+health_reset_baseline() {
+    health_load
+    h_rx="-"
+    h_fails=0
+    health_save
+}
+
+# Bytes received from the edge peer
+wg_rx_bytes() {
+    wg show "${PLUGGIE_INTERFACE1}" transfer 2>/dev/null | awk 'NR==1 {print $2}' || true
+}
+
+# Seconds since the last completed handshake, empty if none
+wg_handshake_age() {
+    local ts
+    ts=$(wg show "${PLUGGIE_INTERFACE1}" latest-handshakes 2>/dev/null | awk 'NR==1 {print $2}' || true)
+    if [ -n "${ts}" ] && [ "${ts}" -gt 0 ]; then
+        echo $(( $(date +%s) - ts ))
+    fi
+}
+
+# Schedule the earliest next health-triggered restart
+health_record_restart() {
+    local idx
+    health_load
+    idx=${h_restarts}
+    if [ "${idx}" -ge "${#HEALTH_BACKOFF[@]}" ]; then
+        idx=$(( ${#HEALTH_BACKOFF[@]} - 1 ))
+    fi
+    h_next=$(( $(date +%s) + HEALTH_BACKOFF[idx] ))
+    h_restarts=$(( h_restarts + 1 ))
+    health_save
+}
+
+# Tunnel health: 0 healthy, 1 unhealthy, 2 restart due
+check_tunnel_health() {
+    local rx rx_after age i replies=0 now
+    health_load
+    rx=$(wg_rx_bytes)
+    age=$(wg_handshake_age)
+
+    # First check after start or counter reset: store baseline only
+    if [ -n "${rx}" ] && { [ "${h_rx}" = "-" ] || [ "${rx}" -lt "${h_rx}" ]; }; then
+        h_rx=${rx}
+        h_fails=0
+        health_save
+        return 0
+    fi
+
+    # Data received from the edge within a valid session
+    if [ -n "${rx}" ] && [ "${rx}" -gt "${h_rx}" ] && [ -n "${age}" ] && [ "${age}" -lt "${HEALTH_HANDSHAKE_MAX_AGE}" ]; then
+        h_rx=${rx}
+        h_fails=0
+        h_restarts=0
+        h_next=0
+        health_save
+        return 0
+    fi
+
+    # Probe the edge, stop at the first reply that also increased rx
+    for i in $(seq 1 "${HEALTH_PING_ATTEMPTS}"); do
+        if ping -q -c 1 -W 2 "${PLUGGIE_ENDPOINT1_IP_INT}" >/dev/null 2>&1; then
+            replies=$(( replies + 1 ))
+            rx_after=$(wg_rx_bytes)
+            if [ -n "${rx}" ] && [ -n "${rx_after}" ] && [ "${rx_after}" -gt "${rx}" ]; then
+                h_rx=${rx_after}
+                h_fails=0
+                h_restarts=0
+                h_next=0
+                health_save
+                return 0
+            fi
+        fi
+    done
+
+    rx_after=$(wg_rx_bytes)
+    h_rx=${rx_after:-${h_rx}}
+    h_fails=$(( h_fails + 1 ))
+    bashio::log.warning "Tunnel health check failed (${h_fails}x in a row, restart after ${HEALTH_MAX_FAILS}): no data from Pluggie endpoint, handshake age ${age:-n/a}${age:+s}, ${replies}/${HEALTH_PING_ATTEMPTS} ping replies"
+
+    if [ "${h_fails}" -lt "${HEALTH_MAX_FAILS}" ]; then
+        health_save
+        return 1
+    fi
+
+    now=$(date +%s)
+    if [ "${now}" -lt "${h_next}" ]; then
+        bashio::log.warning "Tunnel restart postponed by backoff for $(( h_next - now ))s"
+        health_save
+        return 1
+    fi
+
+    health_save
+    return 2
 }
 
 # Function to check certificate expiry and trigger renewal if needed.
@@ -258,10 +381,18 @@ if [ -n "${CURRENT_ENDPOINT_IP}" ] && [ -n "${PLUGGIE_ENDPOINT1_IP}" ] && [ "${C
 fi
 
 # Check VPN connectivity
-if [ "${vpn_restart_needed}" = "false" ]; then
-    if [ -n "${PLUGGIE_ENDPOINT1_IP_INT}" ] && ! ping -q -c 1 -W 3 "${PLUGGIE_ENDPOINT1_IP_INT}" >/dev/null 2>&1; then
+health_rc=0
+health_restart=false
+if [ "${vpn_restart_needed}" = "false" ] && [ -n "${PLUGGIE_ENDPOINT1_IP_INT}" ]; then
+    if check_tunnel_health; then
+        health_rc=0
+    else
+        health_rc=$?
+    fi
+    if [ "${health_rc}" -eq 2 ]; then
         bashio::log.warning "Pluggie endpoint (${PLUGGIE_ENDPOINT1_IP_INT}) is not responding."
         vpn_restart_needed=true
+        health_restart=true
     fi
 fi
 
@@ -270,6 +401,10 @@ if [ "${vpn_restart_needed}" = true ]; then
     if [ ! -f "/etc/wireguard/${PLUGGIE_INTERFACE1}.conf" ]; then
         bashio::log.warning "WireGuard configuration file does not exist. Skipping restart."
         exit 0
+    fi
+
+    if [ "${health_restart}" = true ]; then
+        health_record_restart
     fi
 
     bashio::log.warning "Refreshing Pluggie configuration from API server.."
@@ -314,7 +449,7 @@ if [ "${vpn_restart_needed}" = true ]; then
             bashio::log.error "Failed to refresh Pluggie configuration"
         fi
     fi
-else
+elif [ "${health_rc}" -eq 0 ]; then
     bashio::log.debug "VPN connection is healthy. No need to restart WireGuard."
     # Update state to enabled if it was connectivity_issue (recovered from outage)
     if [ -f "/etc/pluggie.state" ] && [ "$(cat /etc/pluggie.state)" = "connectivity_issue" ]; then

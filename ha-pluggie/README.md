@@ -43,7 +43,7 @@ check [the contributor's page][wg_addon_contributors].
 
 MIT License
 
-Copyright (c) 2024 Tibor Gres
+Copyright (c) 2024-2026 Tibor Gres
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

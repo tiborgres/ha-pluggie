@@ -4,10 +4,15 @@
 # Shows current WireGuard status
 # ==============================================================================
 
+sleep_time=30
+# Re-check sooner after a single failed tunnel health check
+if [ -f /tmp/pluggie_health ] && [ "$(cut -d' ' -f2 /tmp/pluggie_health)" = "1" ]; then
+    sleep_time=10
+fi
+sleep "${sleep_time}"
+
 log_level=$(bashio::config 'log_level' 'info')
 bashio::log.level "${log_level}"
-
-sleep 60
 bashio::log.debug "Requesting current status from Wireguard."
 
 # Check if Endpoint IP address is still the same as it was at start of this addon
